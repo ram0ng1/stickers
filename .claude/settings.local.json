@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//e/laragon/www/flarum/vendor/flarum/emoji/**)",
+      "Read(//e/laragon/www/flarum/vendor/flarum/core/**)",
+      "Read(//e/laragon/www/flarum/**)",
+      "Bash(grep -r \"new Extend\\\\\\\\\\\\\\\\ApiResource\" e:/laragon/www/flarum/vendor/flarum/core/extend.php)"
+    ]
+  }
+}
