@@ -1,117 +1,197 @@
-.ComposerBody-MyEmojiContainer {
-  display: inline-block;
-  z-index: @zindex-dropdown;
+// -------------------------------------------------------
+// Sticker toolbar button — calibrate SVG to match FA solid icon visual weight
+// The sticker SVG paths have ~4px padding inside a 24px viewBox (≈83% fill).
+// FA icons fill ~90%+, so we scale up slightly to compensate.
+// -------------------------------------------------------
 
-  .emoji-picker__wrapper {
-    z-index: inherit;
-  }
-  /* 先定义 tab 样式 */
-  .MyEmoji-tab-bar button {
-    background-color: @control-bg; /* 未选中状态的背景颜色，根据实际需要调整 */
-    color: @primary-color; /* 未选中状态的文本颜色，根据实际需要调整 */
-    padding: 10px 20px; /* 适当调整按钮的内边距 */
-    border: none;
-    cursor: pointer;
-    transition: background-color 0.3s, color 0.3s; /* 添加过渡效果 */
-    border-top-left-radius: 10px; /* 上左圆角矩形效果，根据实际需要调整 */
-    border-top-right-radius: 10px; /* 上右圆角矩形效果，根据实际需要调整 */
-  }
-  /* 鼠标悬停时改变背景颜色 */
-  .MyEmoji-tab-bar button:hover {
-    background-color: @control-bg; /* 悬停时的背景颜色，根据实际需要调整 */
-  }
+.Button-Sticker {
+  font-size: 1.5em;  // makes the 1em SVG appear visually equal to FA icons
 
-  /* 选中状态的样式 */
-  .MyEmoji-tab-bar button.active {
-    background-color:@muted-color ; /* 选中状态的背景颜色，根据实际需要调整 */
-    color: @text-color ; /* 选中状态的文本颜色，根据实际需要调整 */
-  }
-
-  /* 如果需要底部边框 */
-  .MyEmoji-tab-bar button {
-    border-bottom: 2px solid transparent; /* 默认状态下的边框 */
-  }
-
-  /* 选中状态下的底部边框 */
-  .MyEmoji-tab-bar button.active {
-    border-bottom: 2px solid #333; /* 选中状态下的边框颜色，根据实际需要调整 */
-  }
-
-
-  .emoji-picker {
-    background-color: @body-bg;
-    hover-color: darken(fadein(@control-bg, 5%), 5%);
-    category-button-color: @muted-more-color;
-    category-button-active-color: @primary-color;
-    secondary-text-color: @muted-color;
-    text-color: @text-color;
-    border-color: @control-bg;
-    search-focus-border-color: @primary-color;
-    search-icon-color: @muted-color;
-    font: inherit;
-    font-size: 14px;
-    border-radius: @border-radius;
-    line-height: normal;
-    .box-shadow(0 2px 6px @shadow-color);
-    width: 522px;
-    height: 300px;
-    h2.emoji-picker__category-name {
-      text-transform: none;
-    }
-
-    input.emoji-picker__search {
-      background-color: @control-bg;
-      color: @control-color;
-      font-size: 13px;
-
-      &:focus {
-        border: 2px solid @primary-color;
-        color: @text-color;
-      }
-    }
-
-    div.emoji-picker__search-not-found h2 {
-      margin: 1.25em 0;
-    }
-  }
-  @media (max-width: 768px) { /* 假设 768px 是您的移动端阈值，根据实际情况调整 */
-    .emoji-picker {
-      width: 100%; /* 移动端宽度设为 100% */
-    }
-  }
-  /* Webkit 浏览器中的滚动条样式 */
-  .emoji-picker::-webkit-scrollbar {
-    width: 8px; /* 设置滚动条宽度 */
-  }
-
-  .emoji-picker::-webkit-scrollbar-thumb {
-    background-color: @primary-color; /* 设置滚动条的拖动块颜色 */
-    border-radius: 4px; /* 设置滚动条的拖动块圆角 */
-  }
-
-  .emoji-picker::-webkit-scrollbar-track {
-    background-color: @primary-color; /* 设置滚动条轨道的颜色 */
-    border-radius: 4px; /* 设置滚动条轨道的圆角 */
-  }
-
-  /* 其他浏览器中的滚动条样式，可以根据需要添加更多样式 */
-  .emoji-picker {
-    scrollbar-width: thin; /* Firefox 中滚动条的宽度 */
-  }
-
-  .emoji-picker::-moz-scrollbar-thumb {
-    background-color: @primary-color; /* Firefox 中滚动条的拖动块颜色 */
-    border-radius: 4px; /* Firefox 中滚动条的拖动块圆角 */
-  }
-
-  .emoji-picker::-moz-scrollbar-track {
-    background-color: @primary-color; /* Firefox 中滚动条轨道的颜色 */
-    border-radius: 4px; /* Firefox 中滚动条轨道的圆角 */
+  svg {
+    vertical-align: -0.125em;
   }
 }
 
-span.MyEmoji img {
-  height: 5em;
-  margin: 0.5em;
+// -------------------------------------------------------
+// Sticker Picker (floating panel) — minimalist style
+// -------------------------------------------------------
+
+.StickerPicker-wrapper {
+  position: fixed;
+  z-index: 1050;
+}
+
+.StickerPicker {
+  background: var(--body-bg);
+  border: 1px solid var(--control-bg-shaded, rgba(0,0,0,.10));
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.10), 0 8px 24px rgba(0,0,0,.06);
+  width: 320px;
+  max-width: 94vw;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: StickerPickerIn 0.14s ease-out both;
+
+  @keyframes StickerPickerIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  // Loading / empty states
+  &-loading,
+  &-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--muted-color);
+    font-size: 13px;
+  }
+
+  // Tab bar — scrollable row, no wrapping
+  &-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 8px 8px 0;
+    gap: 2px;
+    flex-shrink: 0;
+
+    &::-webkit-scrollbar { display: none; }
+  }
+
+  &-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 4px 4px 0 0;
+    color: var(--muted-color);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px 6px;
+    white-space: nowrap;
+    transition: color .12s, border-color .12s;
+    flex-shrink: 0;
+
+    &:hover {
+      color: var(--text-color);
+    }
+
+    &.active {
+      border-bottom-color: var(--primary-color);
+      color: var(--primary-color);
+      font-weight: 600;
+    }
+  }
+
+  // Sticker grid
+  &-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px;
+    max-height: 240px;
+    overflow-y: auto;
+
+    &::-webkit-scrollbar { width: 4px; }
+    &::-webkit-scrollbar-thumb {
+      background: var(--control-bg-shaded, rgba(0,0,0,.12));
+      border-radius: 4px;
+    }
+  }
+}
+
+// -------------------------------------------------------
+// Individual sticker items (picker)
+// -------------------------------------------------------
+
+.StickerItem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 4px;
+  // Minimalist hover: background tint only, no scale
+  transition: background .12s;
+
+  &:hover {
+    background: var(--control-bg, rgba(0,0,0,.05));
+  }
+
+  &:active {
+    background: var(--control-bg-shaded, rgba(0,0,0,.09));
+  }
+
+  img {
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+    display: block;
+    border-radius: 4px;
+  }
+
+  &--animated {
+    // width/height driven by the player div inside
+  }
+}
+
+// The div that lottie-web renders into inside the picker
+.StickerItem-player {
+  width: 56px;
+  height: 56px;
+  display: block;
+  overflow: hidden;
+  border-radius: 4px;
+
+  // lottie-web creates a <canvas> inside this div
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+  }
+}
+
+// -------------------------------------------------------
+// Stickers rendered inside posts via TextFormatter
+// -------------------------------------------------------
+
+span.Sticker {
+  display: inline-block;
   vertical-align: middle;
+
+  img.sticker {
+    height: 5em;
+    max-width: 10em;
+    margin: .2em .3em;
+    vertical-align: middle;
+    object-fit: contain;
+  }
+
+  // Lottie JSON animated sticker in posts
+  &--lottie,
+  &--tgs {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 5em;
+    height: 5em;
+    margin: .2em .3em;
+    vertical-align: middle;
+    overflow: hidden;
+
+    // lottie-web creates a <canvas> directly inside this span
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+  }
 }

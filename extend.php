@@ -1,19 +1,14 @@
 <?php
 
-/**
- * This file is part of nodeloc/flarum-ext-my-emoji.
- *
- * Copyright (c) 2021 Hasan Özbey
- *
- * LICENSE: For the full copyright and license information,
- * please view the LICENSE file that was distributed
- * with this source code.
- */
-
-namespace Nodeloc\MyEmoji;
+namespace Ramon\Stickers;
 
 use Flarum\Extend;
-use Nodeloc\MyEmoji\Api\Controllers;
+use Ramon\Stickers\Api\Resource\StickerResource;
+use Ramon\Stickers\Api\Controller\ExportStickersController;
+use Ramon\Stickers\Api\Controller\ImportStickersController;
+use Ramon\Stickers\Api\Controller\RenameCategoryController;
+use Ramon\Stickers\Api\Controller\SaveCategoryOrderController;
+use Ramon\Stickers\Api\Controller\UploadStickerController;
 
 return [
     (new Extend\Frontend('forum'))
@@ -26,13 +21,21 @@ return [
 
     new Extend\Locales(__DIR__.'/locale'),
 
+    // Serialize settings to the forum frontend
+    (new Extend\Settings)
+        ->serializeToForum('ramonStickersHoverPlay',       'ramon-stickers.hover-play',       'boolval', false)
+        ->serializeToForum('ramonStickersShowTooltip',     'ramon-stickers.show-tooltip',     'boolval', true)
+        ->serializeToForum('ramonStickersCategoryOrder',   'ramon-stickers.category-order',   null,      '[]'),
+
     (new Extend\Formatter)
         ->configure(ConfigureTextFormatter::class),
 
+    new Extend\ApiResource(StickerResource::class),
+
     (new Extend\Routes('api'))
-        ->get('/nodeloc/myemoji', 'myemoji.list', Controllers\ListEmojisController::class)
-        ->post('/nodeloc/myemoji', 'myemoji.create', Controllers\CreateEmojiController::class)
-        ->post('/nodeloc/import-myemoji', 'myemoji.import', Controllers\ImportEmojiController::class)
-        ->patch('/nodeloc/myemoji/{id}', 'myemoji.update', Controllers\UpdateEmojiController::class)
-        ->delete('/nodeloc/myemoji/{id}', 'myemoji.delete', Controllers\DeleteEmojiController::class),
+        ->post('/stickers/import',           'stickers.import',           ImportStickersController::class)
+        ->post('/stickers/upload',           'stickers.upload',           UploadStickerController::class)
+        ->post('/stickers/export',           'stickers.export',           ExportStickersController::class)
+        ->post('/stickers/rename-category',  'stickers.renameCategory',   RenameCategoryController::class)
+        ->post('/stickers/category-order',   'stickers.categoryOrder',    SaveCategoryOrderController::class),
 ];

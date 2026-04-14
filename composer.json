@@ -1,44 +1,42 @@
 {
-    "name": "nodeloc/flarum-ext-my-emoji",
-    "description": "Simple emoji manager for Flarum.",
+    "name": "ramon/stickers",
+    "version": "2.0.5-beta",
+    "description": "Sticker manager for Flarum with native support for animated TGS and Lottie stickers.",
     "keywords": [
-      "flarum",
-      "emoji",
-      "picker"
+        "flarum",
+        "stickers",
+        "tgs",
+        "lottie",
+        "animated"
     ],
     "type": "flarum-extension",
     "license": "MIT",
     "authors": [
-      {
-        "name": "James",
-        "email": "james@nodeloc.com",
-        "homepage": "https://www.nodeloc.com"
-      }
+        {
+            "name": "Ramon Guilherme",
+            "email": "ramon@ramonguilherme.com.br",
+            "homepage": "https://ramonguilherme.com.br"
+        }
     ],
-    "support": {
-      "issues": "https://github.com/nodeloc/flarum-ext-my-emoji/issues",
-      "source": "https://github.com/nodeloc/flarum-ext-my-emoji"
-    },
     "require": {
-      "flarum/core": "^1.0.2"
-    },
-    "conflict": {
-      "clarkwinkelmann/flarum-ext-emojionearea": "*"
+        "flarum/core": "^2.0.0"
     },
     "autoload": {
-      "psr-4": {
-        "Nodeloc\\MyEmoji\\": "src/"
-      }
+        "psr-4": {
+            "Ramon\\Stickers\\": "src/"
+        }
     },
     "extra": {
-      "flarum-extension": {
-        "title": "MyEmoji",
-        "category": "feature",
-        "icon": {
-          "name": "far fa-icons",
-          "backgroundColor": "#b72a2a",
-          "color": "#fff"
+        "flarum-extension": {
+            "title": "Stickers",
+            "category": "feature",
+            "icon": {
+                "backgroundColor": "#e67e22",
+                "backgroundImage": "url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0yMCwxMS41IEwyMCw3LjUgQzIwLDUuNTY3MDAzMzggMTguNDMyOTk2Niw0IDE2LjUsNCBMNy41LDQgQzUuNTY3MDAzMzgsNCA0LDUuNTY3MDAzMzggNCw3LjUgTDQsMTYuNSBDNCwxOC40MzI5OTY2IDUuNTY3MDAzMzgsMjAgNy41LDIwIEwxMi41LDIwIEMxMy4zMjg0MjcxLDIwIDE0LDE5LjMyODQyNzEgMTQsMTguNSBMMTQsMTYuNSBDMTQsMTQuNTY3MDAzNCAxNS41NjcwMDM0LDEzIDE3LjUsMTMgTDE4LjUsMTMgQzE5LjMyODQyNzEsMTMgMjAsMTIuMzI4NDI3MSAyMCwxMS41IFogTTE5LjkyNjYyNDcsMTMuNTUzMjUzMiBDMTkuNTIyMDUzLDEzLjgzNDg4MjEgMTkuMDMwMzA5MiwxNCAxOC41LDE0IEwxNy41LDE0IEMxNi4xMTkyODgxLDE0IDE1LDE1LjExOTI4ODEgMTUsMTYuNSBMMTUsMTguNSBDMTUsMTguOTIyMjg1OCAxNC44OTUyOTk1LDE5LjMyMDExNzUgMTQuNzEwNDQxNiwxOS42Njg5NTIgQzE3LjQ0OTAxMTMsMTguODI1NTQwMiAxOS41MTg2NjY1LDE2LjQ1NjA0NjQgMTkuOTI2NjI0NywxMy41NTMyNTMyIFoiLz48L3N2Zz4=')",
+                "backgroundSize": "58%",
+                "backgroundRepeat": "no-repeat",
+                "backgroundPosition": "center"
+            }
         }
-      }
     }
-  }
+}

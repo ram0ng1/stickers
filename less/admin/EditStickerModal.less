@@ -1,0 +1,55 @@
+.EditStickerModal {
+  &-titleSticker {
+    height: 2em;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  &-save {
+    margin-right: 8px;
+  }
+
+  &-delete {
+    color: var(--control-danger-color, #d9534f);
+  }
+}
+
+// -------------------------------------------------------
+// TGS license warning banner (inside EditStickerModal)
+// -------------------------------------------------------
+
+.StickerTgsNotice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  border-radius: var(--border-radius, 4px);
+
+  &-icon {
+    color: #b45309;
+    font-size: 14px;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  &-body {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-color);
+
+    strong {
+      display: block;
+      font-size: 12px;
+      color: #92400e;
+      margin-bottom: 3px;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted-color);
+    }
+  }
+}

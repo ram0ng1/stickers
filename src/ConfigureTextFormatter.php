@@ -1,47 +1,45 @@
 <?php
 
-namespace Nodeloc\MyEmoji;
+namespace Ramon\Stickers;
 
 use Flarum\Http\UrlGenerator;
-use Nodeloc\MyEmoji\Models\Emoji;
+use Ramon\Stickers\Models\Sticker;
 use s9e\TextFormatter\Configurator;
 
 class ConfigureTextFormatter
 {
-    /**
-     * @param UrlGenerator $url
-     */
-    public function __construct(UrlGenerator $url)
+    public function __construct(
+        protected UrlGenerator $url
+    ) {}
+
+    public function __invoke(Configurator $config): void
     {
-        $this->url = $url;
-    }
+        $stickers = Sticker::all();
 
-    /**
-     * Configure s9e/TextFormatter
-     *
-     * @param Configurator $config
-     */
-    public function __invoke(Configurator $config)
-    {
-        $customEmojis = Emoji::all();
+        foreach ($stickers as $sticker) {
+            $path  = $sticker->path;
+            $title = htmlspecialchars($sticker->title ?? '', ENT_QUOTES);
 
-        foreach ($customEmojis as $emoji) {
-            $path = $emoji->path;
-
-            // check if the path starts with http:// or https://
-            // We're using a similar thing on the urlChecker.js
-            if (!preg_match('/http(s?)\:\/\//i', $path)) {
+            if (!preg_match('/^https?:\/\//i', $path)) {
                 $path = $this->url->to('forum')->base() . $path;
             }
 
-            $config->Emoticons->add(
-                $emoji->text_to_replace,
-                '
-                    <span class="MyEmoji">
-                        <img class="emoji" src="' . $path . '" alt="' . $emoji->title . '" />
-                    </span>
-                '
-            );
+            $escapedPath = htmlspecialchars($path, ENT_QUOTES);
+            $lowerPath   = strtolower($path);
+            $isLottie    = str_ends_with($lowerPath, '.json');
+            $isTgs       = str_ends_with($lowerPath, '.tgs');
+
+            if ($isTgs) {
+                // TGS (Telegram animated sticker) — gzip-compressed Lottie, rendered by lottie-web
+                $html = '<span class="Sticker Sticker--tgs" data-tgs="' . $escapedPath . '" title="' . $title . '"></span>';
+            } elseif ($isLottie) {
+                // Lottie JSON animated sticker — rendered by lottie-web in the frontend
+                $html = '<span class="Sticker Sticker--lottie" data-lottie="' . $escapedPath . '" title="' . $title . '"></span>';
+            } else {
+                $html = '<span class="Sticker"><img class="sticker" src="' . $escapedPath . '" alt="' . $title . '" /></span>';
+            }
+
+            $config->Emoticons->add($sticker->text_to_replace, $html);
         }
     }
 }
