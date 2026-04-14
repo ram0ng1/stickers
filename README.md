@@ -1,5 +1,3 @@
-<!-- # Stickers for Flarum
-
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Flarum](https://img.shields.io/badge/flarum-%5E2.0-purple)](https://flarum.org)
 
