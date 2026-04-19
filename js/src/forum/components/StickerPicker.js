@@ -39,7 +39,7 @@ export default class StickerPicker extends Component {
 
   loadStickers() {
     app
-      .request({ method: 'GET', url: app.forum.attribute('apiUrl') + '/stickers' })
+      .request({ method: 'GET', url: app.forum.attribute('apiUrl') + '/stickers?page[limit]=500' })
       .then((response) => {
         const baseUrl = app.forum.attribute('baseUrl');
 
