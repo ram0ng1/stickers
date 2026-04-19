@@ -1,6 +1,6 @@
 {
     "name": "ramon/stickers",
-    "version": "2.0.5-beta",
+    "version": "2.0.5",
     "description": "Sticker manager for Flarum with native support for animated TGS and Lottie stickers.",
     "keywords": [
         "flarum",
