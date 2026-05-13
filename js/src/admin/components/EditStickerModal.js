@@ -223,6 +223,9 @@ export default class EditStickerModal extends Modal {
       const formData = new FormData();
       formData.append('file', file);
 
+      // I-4: raw fetch() (not app.request) because app.request doesn't expose FormData
+      // semantics for multipart uploads. CSRF token is added manually to compensate
+      // for skipping app.request's auto-injection. See CLAUDE.md §16.
       fetch(app.forum.attribute('apiUrl') + '/stickers/upload', {
         method: 'POST',
         headers: {
