@@ -52,7 +52,7 @@ jobs:
 
       - name: Detect composer.json version change
         id: check_version
-        uses: EndBug/version-check@d17247dd94ca7b39d0b0691399be8d7c510622c9 # v2
+        uses: EndBug/version-check@095362f3cd50f690c8fa0e6afeea81834bd8d320 # v3.0.0
         with:
           file-name: composer.json
           diff-search: true
