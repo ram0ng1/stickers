@@ -46,14 +46,20 @@ jobs:
       fail-fast: false
       matrix:
         # CLAUDE.md §35.13/I5 — matrix against both supported Flarum branches.
-        php: ['8.2', '8.3', '8.4']
-        flarum-core:
-          - '^2.0.0-rc.1'
-          - '2.x-dev'
-        # composer.json declares ^1.8.10 || ^2.0; v1 still validated on PHP 8.2 only.
+        # composer.json declares "^1.8.10 || ^2.0". Flarum 2.x requires PHP >=8.3,
+        # so 8.2 only runs against v1. Explicit include list keeps the matrix shape
+        # honest (no excludes needed).
         include:
-          - php: '8.2'
-            flarum-core: '^1.8.10'
+          # Flarum v1 — works on all supported PHP versions
+          - { php: '8.2', flarum-core: '^1.8.10' }
+          - { php: '8.3', flarum-core: '^1.8.10' }
+          - { php: '8.4', flarum-core: '^1.8.10' }
+          # Flarum v2 RC — requires PHP ^8.3
+          - { php: '8.3', flarum-core: '^2.0.0-rc.1' }
+          - { php: '8.4', flarum-core: '^2.0.0-rc.1' }
+          # Flarum v2 dev branch — requires PHP ^8.3
+          - { php: '8.3', flarum-core: '2.x-dev' }
+          - { php: '8.4', flarum-core: '2.x-dev' }
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
@@ -77,8 +83,12 @@ jobs:
         run: composer validate --strict --no-check-publish --no-check-version
 
       - name: Pin Flarum core version
+        # flarum/core is a RUNTIME dependency (lives in `require`, not `require-dev`).
+        # Using `composer require --dev` here would MOVE it to require-dev, which is
+        # wrong. Plain `composer require --no-update` updates the existing constraint
+        # in-place, then `composer update` resolves and installs.
         run: |
-          composer require --no-update --dev "flarum/core:${{ matrix.flarum-core }}"
+          composer require --no-update "flarum/core:${{ matrix.flarum-core }}"
           composer update --prefer-stable --no-progress --no-interaction --no-scripts
 
       - name: Lint PHP (php -l)
