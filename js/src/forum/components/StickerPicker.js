@@ -143,54 +143,54 @@ export default class StickerPicker extends Component {
       this.loading
         ? m('div.StickerPicker-loading', m('i.fas.fa-spinner.fa-spin'))
         : categories.length === 0
-        ? m('div.StickerPicker-empty', app.translator.trans('ramon-stickers.forum.picker.no_stickers'))
-        : [
-            // Tab bar
-            m(
-              'div.StickerPicker-tabs',
-              categories.map((cat) =>
-                m(
-                  'button.StickerPicker-tab' + (cat === this.activeCategory ? '.active' : ''),
-                  {
-                    onclick: (e) => {
-                      e.preventDefault();
-                      this.activeCategory = cat;
-                      m.redraw();
-                      requestAnimationFrame(() => this.initAnimatedStickers());
+          ? m('div.StickerPicker-empty', app.translator.trans('ramon-stickers.forum.picker.no_stickers'))
+          : [
+              // Tab bar
+              m(
+                'div.StickerPicker-tabs',
+                categories.map((cat) =>
+                  m(
+                    'button.StickerPicker-tab' + (cat === this.activeCategory ? '.active' : ''),
+                    {
+                      onclick: (e) => {
+                        e.preventDefault();
+                        this.activeCategory = cat;
+                        m.redraw();
+                        requestAnimationFrame(() => this.initAnimatedStickers());
+                      },
                     },
-                  },
-                  this.byCategory[cat][0].categoryName || cat
+                    this.byCategory[cat][0].categoryName || cat
+                  )
                 )
-              )
-            ),
+              ),
 
-            // Sticker grid
-            m(
-              'div.StickerPicker-grid',
-              (this.byCategory[this.activeCategory] || []).map((sticker) =>
-                m(
-                  'span.StickerItem' + (sticker.isLottie || sticker.isTgs ? '.StickerItem--animated' : ''),
-                  {
-                    // key ensures Mithril creates fresh DOM elements on tab switch,
-                    // preventing data-lottie-loaded / canvas leakage between stickers
-                    key: sticker.id,
-                    onclick: (e) => {
-                      e.preventDefault();
-                      this.attrs.onInsert(sticker.textToReplace);
+              // Sticker grid
+              m(
+                'div.StickerPicker-grid',
+                (this.byCategory[this.activeCategory] || []).map((sticker) =>
+                  m(
+                    'span.StickerItem' + (sticker.isLottie || sticker.isTgs ? '.StickerItem--animated' : ''),
+                    {
+                      // key ensures Mithril creates fresh DOM elements on tab switch,
+                      // preventing data-lottie-loaded / canvas leakage between stickers
+                      key: sticker.id,
+                      onclick: (e) => {
+                        e.preventDefault();
+                        this.attrs.onInsert(sticker.textToReplace);
+                      },
                     },
-                  },
-                  sticker.isLottie
-                    ? // Lottie JSON: container div — lottie-web creates <canvas> inside it
-                      m('div.StickerItem-player', { 'data-lottie-url': sticker.url })
-                    : sticker.isTgs
-                    ? // TGS: same pattern
-                      m('div.StickerItem-player', { 'data-tgs-url': sticker.url })
-                    : // Static image
-                      m('img', { src: sticker.url, alt: sticker.name })
+                    sticker.isLottie
+                      ? // Lottie JSON: container div — lottie-web creates <canvas> inside it
+                        m('div.StickerItem-player', { 'data-lottie-url': sticker.url })
+                      : sticker.isTgs
+                        ? // TGS: same pattern
+                          m('div.StickerItem-player', { 'data-tgs-url': sticker.url })
+                        : // Static image
+                          m('img', { src: sticker.url, alt: sticker.name })
+                  )
                 )
-              )
-            ),
-          ],
+              ),
+            ],
     ]);
   }
 
