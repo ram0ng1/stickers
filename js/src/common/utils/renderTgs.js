@@ -6,7 +6,6 @@
  * The container must be a regular HTML element (div/span), NOT a <canvas>.
  */
 import lottie from 'lottie-web/build/player/lottie_canvas';
-import urlChecker from './urlChecker';
 
 // Cap on decompressed size to defuse gzip bombs: a tiny .tgs that expands to
 // hundreds of MB would lock up the user's browser. Real TGS files are well
@@ -14,8 +13,17 @@ import urlChecker from './urlChecker';
 const MAX_DECOMPRESSED_BYTES = 8 * 1024 * 1024;
 
 async function decompressTgs(url) {
-  if (!urlChecker(url)) throw new Error('Invalid URL scheme');
-  const response = await fetch(url);
+  // Same-origin only: refuse to fetch animations from arbitrary hosts.
+  // Also rejects javascript:/data:/file: schemes, whose .origin is "null".
+  let parsed;
+  try {
+    parsed = new URL(url, location.origin);
+  } catch {
+    throw new Error('Invalid URL');
+  }
+  if (parsed.origin !== location.origin) throw new Error('TGS URL must be same-origin');
+
+  const response = await fetch(parsed.href);
   if (!response.ok) throw new Error('HTTP ' + response.status);
   const buffer = await response.arrayBuffer();
 
