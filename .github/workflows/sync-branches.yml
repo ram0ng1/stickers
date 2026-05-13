@@ -1,4 +1,4 @@
-name: Sincronizar Branches com Main
+name: Sync Branches with Main
 
 on:
   push:
@@ -6,29 +6,37 @@ on:
       - main
   workflow_dispatch:
 
+# CLAUDE.md §35.13/C1 — default-deny token scope at the workflow level.
+permissions: {}
+
 concurrency:
   group: sync-branches
   cancel-in-progress: false
 
 jobs:
   sync:
-    name: Sincronizar branches com main
+    name: Sync branches with main
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout do repositório
-        uses: actions/checkout@v4
+      - name: Harden runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configurar Git
+      - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Sincronizar branches com main
+      - name: Sync branches with main
         run: |
           git fetch --all
 
@@ -40,15 +48,15 @@ jobs:
             | tr -d ' ')
 
           for branch in $BRANCHES; do
-            echo "Sincronizando branch: $branch"
+            echo "Syncing branch: $branch"
 
             git checkout -B "$branch" "origin/$branch"
 
             if git merge origin/main --no-edit -m "chore: sync with main"; then
               git push origin "$branch"
-              echo "Branch '$branch' sincronizada com sucesso"
+              echo "Branch '$branch' synced successfully"
             else
-              echo "Conflito ao sincronizar '$branch' com main - pulando"
+              echo "Conflict syncing '$branch' with main — skipping"
               git merge --abort
             fi
           done

@@ -29,6 +29,10 @@ class ExportStickersController implements RequestHandlerInterface
             return new JsonResponse(['error' => 'Could not create ZIP'], 500);
         }
 
+        // Resolve the canonical storage base ONCE, outside the loop.
+        // Path traversal hardening — see CLAUDE.md §13.
+        $base = realpath($publicPath . '/assets/stickers');
+
         $metadata = [];
 
         foreach ($stickers as $sticker) {
@@ -41,14 +45,15 @@ class ExportStickersController implements RequestHandlerInterface
                 'path'            => $path,
             ];
 
-            // Include actual file for local paths
+            // Include actual file for local paths — strictly confined to /assets/stickers/
             if ($path !== '' && ! preg_match('/^https?:\/\//i', $path)) {
-                $filePath = $publicPath . $path;
-
-                if (file_exists($filePath)) {
-                    $zipEntry     = 'files/' . basename($path);
-                    $zip->addFile($filePath, $zipEntry);
-                    $item['file'] = $zipEntry;
+                if ($base !== false && $this->isOwnedLocalAsset($path, $publicPath, $base)) {
+                    $filePath = realpath($publicPath . $path);
+                    if ($filePath !== false && file_exists($filePath)) {
+                        $zipEntry     = 'files/' . basename($path);
+                        $zip->addFile($filePath, $zipEntry);
+                        $item['file'] = $zipEntry;
+                    }
                 }
             }
 
@@ -66,5 +71,29 @@ class ExportStickersController implements RequestHandlerInterface
             'filename' => 'stickers-' . date('Y-m-d') . '.zip',
             'data'     => base64_encode($binary),
         ], 200);
+    }
+
+    /**
+     * Confirm that a stored path actually resolves inside the public stickers dir.
+     * Defeats admin-controlled `../` path values that would let export read arbitrary
+     * server files (CLAUDE.md §13 — path traversal hardening).
+     */
+    private function isOwnedLocalAsset(string $path, string $publicPath, string $base): bool
+    {
+        // Reject null bytes and stream wrappers up front.
+        if (str_contains($path, "\0") || str_contains($path, '://')) {
+            return false;
+        }
+        // Shape allowlist matches what ImportStickersController::isValidStickerPath accepts.
+        if (! preg_match('#^/assets/stickers/[A-Za-z0-9._-]+$#', $path)) {
+            return false;
+        }
+        // Canonicalize and confine with the trailing-separator prefix trick to avoid
+        // matching e.g. /assets/stickers-backup/secret.
+        $resolved = realpath($publicPath . $path);
+        if ($resolved === false) {
+            return false;
+        }
+        return str_starts_with($resolved . DIRECTORY_SEPARATOR, $base . DIRECTORY_SEPARATOR);
     }
 }

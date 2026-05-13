@@ -9,6 +9,7 @@ use Ramon\Stickers\Api\Controller\ImportStickersController;
 use Ramon\Stickers\Api\Controller\RenameCategoryController;
 use Ramon\Stickers\Api\Controller\SaveCategoryOrderController;
 use Ramon\Stickers\Api\Controller\UploadStickerController;
+use Ramon\Stickers\Api\UploadThrottler;
 
 return [
     (new Extend\Frontend('forum'))
@@ -38,4 +39,8 @@ return [
         ->post('/stickers/export',           'stickers.export',           ExportStickersController::class)
         ->post('/stickers/rename-category',  'stickers.renameCategory',   RenameCategoryController::class)
         ->post('/stickers/category-order',   'stickers.categoryOrder',    SaveCategoryOrderController::class),
+
+    // CLAUDE.md §R-2 — per-actor rate limit on the heavy upload/import routes.
+    (new Extend\ThrottleApi())
+        ->set('ramonStickersUploadThrottle', UploadThrottler::class),
 ];

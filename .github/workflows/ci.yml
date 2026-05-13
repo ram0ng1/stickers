@@ -7,25 +7,67 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Avoid stacking redundant runs for the same PR or branch.
+# CLAUDE.md §35.13/C1 — default-deny token scope at the workflow level.
+permissions: {}
+
+# CLAUDE.md §35.13/I4 — cancel stacked runs on the same ref.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
-  php:
-    name: PHP ${{ matrix.php }}
+  # CLAUDE.md §35.13/I1 — block PRs that introduce dependencies with known CVEs.
+  dependency-review:
+    name: Dependency Review
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Review dependencies
+        uses: actions/dependency-review-action@3c4e3dcb1aa7874d2c16be7d79418e9b7efd6261 # v4.8.2
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
+  php:
+    name: PHP ${{ matrix.php }} × Flarum ${{ matrix.flarum-core }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.2', '8.3', '8.4']
+        # CLAUDE.md §35.13/I5 — matrix against both supported Flarum branches.
+        # composer.json declares "^1.8.10 || ^2.0". Flarum 2.x requires PHP >=8.3,
+        # so 8.2 only runs against v1. Explicit include list keeps the matrix shape
+        # honest (no excludes needed).
+        include:
+          # Flarum v1 — works on all supported PHP versions
+          - { php: '8.2', flarum-core: '^1.8.10' }
+          - { php: '8.3', flarum-core: '^1.8.10' }
+          - { php: '8.4', flarum-core: '^1.8.10' }
+          # Flarum v2 RC — requires PHP ^8.3
+          - { php: '8.3', flarum-core: '^2.0.0-rc.1' }
+          - { php: '8.4', flarum-core: '^2.0.0-rc.1' }
+          # Flarum v2 dev branch — requires PHP ^8.3
+          - { php: '8.3', flarum-core: '2.x-dev' }
+          - { php: '8.4', flarum-core: '2.x-dev' }
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        with:
+          egress-policy: audit
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
@@ -34,41 +76,67 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      - name: Validar composer.json
-        # `--no-check-version` silencia o aviso "version field is present" —
-        # mantemos o campo de propósito (lido pelo EndBug/version-check no
-        # workflow de release). Todos os outros warnings continuam fatais.
+      - name: Validate composer.json
+        # `--no-check-version` silences the "version field is present" warning —
+        # the field is kept intentionally so EndBug/version-check in the release
+        # workflow can detect bumps. All other warnings remain fatal.
         run: composer validate --strict --no-check-publish --no-check-version
+
+      - name: Pin Flarum core version
+        # flarum/core is a RUNTIME dependency (lives in `require`, not `require-dev`).
+        # Using `composer require --dev` here would MOVE it to require-dev, which is
+        # wrong. Plain `composer require --no-update` updates the existing constraint
+        # in-place, then `composer update` resolves and installs.
+        run: |
+          composer require --no-update "flarum/core:${{ matrix.flarum-core }}"
+          composer update --prefer-stable --no-progress --no-interaction --no-scripts
 
       - name: Lint PHP (php -l)
         run: |
           set -euo pipefail
           mapfile -d '' files < <(find src migrations extend.php -name '*.php' -print0 2>/dev/null)
-          [ "${#files[@]}" -gt 0 ] || { echo "Nenhum arquivo PHP encontrado"; exit 1; }
+          [ "${#files[@]}" -gt 0 ] || { echo "No PHP files found"; exit 1; }
           printf '%s\0' "${files[@]}" | xargs -0 -n1 -P4 php -l
 
+      - name: composer audit
+        # CLAUDE.md §35.13/R2 — check the Packagist security advisories DB.
+        run: composer audit --no-dev --format=plain
+        continue-on-error: true # advisories happen; flag but don't block
+
   js:
-    name: JS (format, build)
+    name: JS (format, build, audit)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        with:
+          egress-policy: audit
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 20
           cache: 'npm'
           cache-dependency-path: js/package-lock.json
 
-      - name: Instalar dependências JS
+      - name: Install JS dependencies
         working-directory: js
         run: npm ci
 
-      - name: Verificar formatação (Prettier)
+      - name: Prettier (format-check)
         working-directory: js
         run: npm run format-check
 
-      - name: Build (webpack production)
+      - name: npm audit
+        working-directory: js
+        run: npm audit --audit-level=high
+        continue-on-error: true # advisories happen; flag but don't block
+
+      - name: Webpack (production build)
         working-directory: js
         run: npm run build
