@@ -5,6 +5,44 @@
  * The container must be a regular HTML element (div/span), NOT a <canvas>.
  */
 import lottie from 'lottie-web/build/player/lottie_canvas';
+import urlChecker from './urlChecker';
+
+// Cap on raw JSON size: a Lottie payload of hundreds of MB would freeze the
+// tab while parsing. Real Lottie files are well under 1 MB.
+const MAX_LOTTIE_BYTES = 8 * 1024 * 1024;
+
+async function fetchLottieJson(url) {
+  if (!urlChecker(url)) throw new Error('Invalid URL scheme');
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('HTTP ' + response.status);
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.length;
+    if (total > MAX_LOTTIE_BYTES) {
+      try {
+        await reader.cancel();
+      } catch (_) {
+        /* noop */
+      }
+      throw new Error('Lottie payload exceeds ' + MAX_LOTTIE_BYTES + ' bytes');
+    }
+    chunks.push(value);
+  }
+
+  const buf = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buf.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return JSON.parse(new TextDecoder().decode(buf));
+}
 
 /**
  * Render a Lottie JSON animation into a container element.
@@ -23,9 +61,7 @@ import lottie from 'lottie-web/build/player/lottie_canvas';
  */
 export async function renderLottie(container, lottieUrl, options = {}) {
   try {
-    const response = await fetch(lottieUrl);
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    const animData = await response.json();
+    const animData = await fetchLottieJson(lottieUrl);
 
     // Remove ALL existing canvases — covers same-type and cross-type leftovers
     // (e.g., a lottie canvas left behind when the container is reused for a TGS sticker)
