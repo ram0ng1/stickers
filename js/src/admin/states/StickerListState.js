@@ -2,13 +2,13 @@ import app from 'flarum/admin/app';
 
 export default class StickerListState {
   constructor() {
-    this.stickers     = [];
-    this.moreResults  = false;
-    this.loading      = false;
+    this.stickers = [];
+    this.moreResults = false;
+    this.loading = false;
 
     // Selection mode
     this.selectionMode = false;
-    this.selectedIds   = new Set();
+    this.selectedIds = new Set();
   }
 
   // ── Loading ──────────────────────────────────────────────────────────────
@@ -16,7 +16,7 @@ export default class StickerListState {
   loadResults(offset = 0) {
     if (offset === 0) {
       // Reset on fresh load so re-entering the page never duplicates
-      this.stickers    = [];
+      this.stickers = [];
       this.moreResults = false;
     }
     this.loading = true;
@@ -30,7 +30,7 @@ export default class StickerListState {
 
   parseResults(results) {
     this.stickers.push(...results);
-    this.loading     = false;
+    this.loading = false;
     this.moreResults = !!results.payload.links && !!results.payload.links.next;
     m.redraw();
     return results;
@@ -47,9 +47,15 @@ export default class StickerListState {
     m.redraw();
   }
 
-  isLoading()      { return this.loading; }
-  hasMoreResults() { return this.moreResults; }
-  empty()          { return this.stickers.length === 0 && !this.loading; }
+  isLoading() {
+    return this.loading;
+  }
+  hasMoreResults() {
+    return this.moreResults;
+  }
+  empty() {
+    return this.stickers.length === 0 && !this.loading;
+  }
 
   // ── Selection ─────────────────────────────────────────────────────────────
 

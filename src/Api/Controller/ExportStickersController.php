@@ -3,6 +3,7 @@
 namespace Ramon\Stickers\Api\Controller;
 
 use Flarum\Foundation\Paths;
+use Flarum\Http\RequestUtil;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -17,6 +18,8 @@ class ExportStickersController implements RequestHandlerInterface
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
+        RequestUtil::getActor($request)->assertAdmin();
+
         $stickers = Sticker::all();
         $publicPath = $this->paths->public;
         $tmpFile    = tempnam(sys_get_temp_dir(), 'stickers_export_') . '.zip';

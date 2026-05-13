@@ -66,8 +66,11 @@ export default class StickerPicker extends Component {
 
         // Respect the admin-saved category order
         const savedOrder = (() => {
-          try { return JSON.parse(app.forum.attribute('ramonStickersCategoryOrder') || '[]'); }
-          catch { return []; }
+          try {
+            return JSON.parse(app.forum.attribute('ramonStickersCategoryOrder') || '[]');
+          } catch {
+            return [];
+          }
         })();
 
         const allCats = Object.keys(this.byCategory);
@@ -82,7 +85,9 @@ export default class StickerPicker extends Component {
           });
           // Rebuild byCategory in sorted order
           const sorted = {};
-          allCats.forEach((k) => { sorted[k] = this.byCategory[k]; });
+          allCats.forEach((k) => {
+            sorted[k] = this.byCategory[k];
+          });
           this.byCategory = sorted;
         }
 

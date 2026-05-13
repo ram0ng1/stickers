@@ -17,16 +17,16 @@ export default class EditStickerModal extends Modal {
   oninit(vnode) {
     super.oninit(vnode);
 
-    this.sticker      = this.attrs.model || app.store.createRecord('stickers');
-    this.category     = Stream(this.sticker.category() || '');
+    this.sticker = this.attrs.model || app.store.createRecord('stickers');
+    this.category = Stream(this.sticker.category() || '');
     this.categoryName = Stream(this.sticker.categoryName() || '');
     this.stickerTitle = Stream(this.sticker.title() || '');
     this.textToReplace = Stream(this.sticker.textToReplace() || '');
-    this.path         = Stream(this.sticker.path() || '');
-    this.uploading    = false;
-    this.uploadError  = null;
+    this.path = Stream(this.sticker.path() || '');
+    this.uploading = false;
+    this.uploadError = null;
     // URL that was last rendered into the preview div (to avoid re-rendering same file)
-    this._previewUrl  = null;
+    this._previewUrl = null;
   }
 
   className() {
@@ -34,9 +34,7 @@ export default class EditStickerModal extends Modal {
   }
 
   title() {
-    return this.stickerTitle()
-      ? this.stickerTitle()
-      : app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.modal_title');
+    return this.stickerTitle() ? this.stickerTitle() : app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.modal_title');
   }
 
   content() {
@@ -91,11 +89,7 @@ export default class EditStickerModal extends Modal {
       'path',
       <div className="Form-group">
         <label>{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.path_or_url_label')}</label>
-        <input
-          className="FormControl"
-          placeholder="/assets/stickers/meme.png  or  https://..."
-          bidi={this.path}
-        />
+        <input className="FormControl" placeholder="/assets/stickers/meme.png  or  https://..." bidi={this.path} />
       </div>,
       10
     );
@@ -106,13 +100,7 @@ export default class EditStickerModal extends Modal {
       <div className="Form-group">
         <label>{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.upload_label')}</label>
         <div className="StickerUpload">
-          <Button
-            className="Button"
-            loading={this.uploading}
-            disabled={this.uploading}
-            onclick={() => this.triggerFileUpload()}
-            icon="fas fa-upload"
-          >
+          <Button className="Button" loading={this.uploading} disabled={this.uploading} onclick={() => this.triggerFileUpload()} icon="fas fa-upload">
             {app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.upload_button')}
           </Button>
 
@@ -144,9 +132,7 @@ export default class EditStickerModal extends Modal {
 
           {this.uploadError && <p className="StickerUpload-error">{this.uploadError}</p>}
         </div>
-        <p className="helpText">
-          {app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.upload_help')}
-        </p>
+        <p className="helpText">{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.upload_help')}</p>
 
         {/* TGS license warning — shown whenever a .tgs file is loaded */}
         {this.isTgsPath(this.path()) && (
@@ -155,10 +141,9 @@ export default class EditStickerModal extends Modal {
             <div className="StickerTgsNotice-body">
               <strong>License notice — TGS file</strong>
               <p>
-                TGS files are Telegram animated stickers and may be subject to copyright or
-                distribution restrictions imposed by their original authors. By saving this
-                sticker you confirm that you have the right to use and distribute this content,
-                and you take full legal responsibility for doing so.
+                TGS files are Telegram animated stickers and may be subject to copyright or distribution restrictions imposed by their original
+                authors. By saving this sticker you confirm that you have the right to use and distribute this content, and you take full legal
+                responsibility for doing so.
               </p>
             </div>
           </div>
@@ -282,7 +267,8 @@ export default class EditStickerModal extends Modal {
   sanitizeCategoryCode(raw) {
     return (raw || '')
       .toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
   }

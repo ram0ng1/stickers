@@ -7,40 +7,54 @@
  */
 import lottie from 'lottie-web/build/player/lottie_canvas';
 
+// Cap on decompressed size to defuse gzip bombs: a tiny .tgs that expands to
+// hundreds of MB would lock up the user's browser. Real TGS files are well
+// under 1 MB decompressed; 8 MB is a generous ceiling.
+const MAX_DECOMPRESSED_BYTES = 8 * 1024 * 1024;
+
 async function decompressTgs(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error('HTTP ' + response.status);
   const buffer = await response.arrayBuffer();
 
   // DecompressionStream is available in modern browsers (Chrome 80+, Firefox 113+, Safari 16.4+)
-  if (typeof DecompressionStream !== 'undefined') {
-    const ds = new DecompressionStream('gzip');
-    const writer = ds.writable.getWriter();
-    writer.write(new Uint8Array(buffer));
-    writer.close();
-
-    const reader = ds.readable.getReader();
-    const chunks = [];
-    let done = false;
-
-    while (!done) {
-      const { done: d, value } = await reader.read();
-      done = d;
-      if (value) chunks.push(value);
-    }
-
-    const total = chunks.reduce((s, c) => s + c.length, 0);
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      out.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    return JSON.parse(new TextDecoder().decode(out));
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('DecompressionStream not supported in this browser');
   }
 
-  throw new Error('DecompressionStream not supported in this browser');
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  writer.write(new Uint8Array(buffer));
+  writer.close();
+
+  const reader = ds.readable.getReader();
+  const chunks = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.length;
+    if (total > MAX_DECOMPRESSED_BYTES) {
+      try {
+        await reader.cancel();
+      } catch (_) {
+        /* noop */
+      }
+      throw new Error('TGS decompressed payload exceeds ' + MAX_DECOMPRESSED_BYTES + ' bytes');
+    }
+    chunks.push(value);
+  }
+
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return JSON.parse(new TextDecoder().decode(out));
 }
 
 /**

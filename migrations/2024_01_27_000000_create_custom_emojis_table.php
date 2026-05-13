@@ -1,27 +1,14 @@
 <?php
 
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 
+// Legacy `my_emoji` table from the original Nodeloc emoji manager. The code that
+// read/wrote this table has been removed; drop the table on existing installs.
 return [
     'up' => function (Builder $schema) {
-        if ($schema->hasTable('my_emoji')) {
-            return;
-        }
-
-        $schema->create(
-            'my_emoji',
-            function (Blueprint $table) {
-                $table->increments('id');
-                $table->string('category')->nullable();
-                $table->string('category_name')->nullable();
-                $table->string('title')->nullable();
-                $table->string('text_to_replace')->nullable();
-                $table->string('path');
-            }
-        );
+        $schema->dropIfExists('my_emoji');
     },
     'down' => function (Builder $schema) {
-        $schema->dropIfExists('my_emoji');
+        // No rollback — the legacy code that consumed this table is gone.
     },
 ];
