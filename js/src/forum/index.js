@@ -177,21 +177,21 @@ app.initializers.add('ramon-stickers', () => {
     const btn = document.querySelector('.Button-Sticker');
     if (!btn || !mountNode) return;
 
-    const rect   = btn.getBoundingClientRect();
+    const rect = btn.getBoundingClientRect();
     const margin = 8;
-    const gap    = 6;
+    const gap = 6;
     const pickerW = mountNode.offsetWidth || 320;
 
     if (window.innerWidth <= 640) {
       // Mobile: centered overlay
       Object.assign(mountNode.style, {
-        position:  'fixed',
-        top:       '50%',
-        left:      '50%',
-        bottom:    '',
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        bottom: '',
         transform: 'translate(-50%,-50%)',
-        zIndex:    '1050',
-        width:     'min(340px, 94vw)',
+        zIndex: '1050',
+        width: 'min(340px, 94vw)',
       });
       return;
     }
@@ -199,18 +199,18 @@ app.initializers.add('ramon-stickers', () => {
     // Always above the button: anchor the picker's bottom edge just above the button top.
     // Using `bottom` makes it independent of picker height — no measuring needed.
     const bottom = window.innerHeight - rect.top + gap;
-    let left     = rect.left + rect.width / 2 - pickerW / 2;
+    let left = rect.left + rect.width / 2 - pickerW / 2;
 
     left = Math.max(margin, Math.min(left, window.innerWidth - pickerW - margin));
 
     Object.assign(mountNode.style, {
-      position:  'fixed',
-      bottom:    bottom + 'px',
-      top:       '',           // clear top so it doesn't conflict
-      left:      left + 'px',
+      position: 'fixed',
+      bottom: bottom + 'px',
+      top: '', // clear top so it doesn't conflict
+      left: left + 'px',
       transform: '',
-      zIndex:    '1050',
-      width:     '',
+      zIndex: '1050',
+      width: '',
     });
   }
 });

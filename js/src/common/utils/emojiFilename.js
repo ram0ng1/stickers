@@ -16,7 +16,7 @@ export function emojiToSlug(raw) {
   const replaced = replaceEmoji(raw, (emoji) => '_' + emoji.key + '_');
 
   return replaced
-    .replace(/_+/g, '_')   // collapse multiple underscores
+    .replace(/_+/g, '_') // collapse multiple underscores
     .replace(/^_|_$/g, '') // trim leading/trailing underscores
     .toLowerCase();
 }
@@ -37,7 +37,5 @@ export function emojiToTitle(filename) {
   const slug = emojiToSlug(base);
 
   // Replace _ and - with spaces, then title-case
-  return slug
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return slug.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }

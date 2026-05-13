@@ -13,10 +13,10 @@ import EditStickerModal from './EditStickerModal';
 export default class StickerSection extends Component {
   oninit(vnode) {
     super.oninit(vnode);
-    this.hoverPlayEnabled   = app.data.settings['ramon-stickers.hover-play']   === '1';
+    this.hoverPlayEnabled = app.data.settings['ramon-stickers.hover-play'] === '1';
     this.showTooltipEnabled = app.data.settings['ramon-stickers.show-tooltip'] !== '0';
-    this.savingHoverPlay    = false;
-    this.savingShowTooltip  = false;
+    this.savingHoverPlay = false;
+    this.savingShowTooltip = false;
 
     // Export
     this.exporting = false;
@@ -46,7 +46,7 @@ export default class StickerSection extends Component {
       .request({ method: 'POST', url: app.forum.attribute('apiUrl') + '/stickers/export' })
       .then((response) => {
         const binary = atob(response.data);
-        const bytes  = new Uint8Array(binary.length);
+        const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         saveAs(new Blob([bytes], { type: 'application/zip' }), response.filename || 'stickers.zip');
       })
@@ -65,8 +65,8 @@ export default class StickerSection extends Component {
   // ---------------------------------------------------------------------------
 
   importStickerList() {
-    const input  = document.createElement('input');
-    input.type   = 'file';
+    const input = document.createElement('input');
+    input.type = 'file';
     input.accept = '.zip,.json';
 
     input.onchange = (e) => {
@@ -116,7 +116,10 @@ export default class StickerSection extends Component {
       app.stickerListState.stickers = [];
       app.stickerListState.loadResults();
 
-      setTimeout(() => { this.importState = null; m.redraw(); }, 6000);
+      setTimeout(() => {
+        this.importState = null;
+        m.redraw();
+      }, 6000);
     };
 
     xhr.onerror = () => {
@@ -154,7 +157,10 @@ export default class StickerSection extends Component {
           app.stickerListState.stickers = [];
           app.stickerListState.loadResults();
 
-          setTimeout(() => { this.importState = null; m.redraw(); }, 6000);
+          setTimeout(() => {
+            this.importState = null;
+            m.redraw();
+          }, 6000);
         })
         .catch((err) => {
           this.importState = { active: false, imported: 0, skipped: 0, total: 0, error: String(err) };
@@ -169,23 +175,21 @@ export default class StickerSection extends Component {
   // ---------------------------------------------------------------------------
 
   bulkUploadFiles() {
-    const categoryName = prompt(
-      app.translator.trans('ramon-stickers.admin.sticker_section.bulk_upload_category_prompt'),
-      'Stickers'
-    );
+    const categoryName = prompt(app.translator.trans('ramon-stickers.admin.sticker_section.bulk_upload_category_prompt'), 'Stickers');
     if (categoryName === null) return; // cancelled
 
     const category = (categoryName || 'stickers')
       .toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip diacritics
-      .replace(/[^a-z0-9]+/g, '_')                      // dots, spaces, special chars → _
-      .replace(/^_+|_+$/g, '');                          // trim leading/trailing _
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // strip diacritics
+      .replace(/[^a-z0-9]+/g, '_') // dots, spaces, special chars → _
+      .replace(/^_+|_+$/g, ''); // trim leading/trailing _
     const catLabel = categoryName || 'Stickers';
 
-    const input    = document.createElement('input');
-    input.type     = 'file';
+    const input = document.createElement('input');
+    input.type = 'file';
     input.multiple = true;
-    input.accept   = '.json,.tgs,.png,.gif,.webp,.jpg,.jpeg,.apng';
+    input.accept = '.json,.tgs,.png,.gif,.webp,.jpg,.jpeg,.apng';
 
     input.onchange = (e) => {
       const files = Array.from(e.target.files);
@@ -208,30 +212,33 @@ export default class StickerSection extends Component {
       app.stickerListState.loadResults();
       app.request({ method: 'DELETE', url: app.forum.attribute('apiUrl') + '/cache' }).catch(() => {});
       m.redraw();
-      setTimeout(() => { this.uploadState = null; m.redraw(); }, 5000);
+      setTimeout(() => {
+        this.uploadState = null;
+        m.redraw();
+      }, 5000);
       return;
     }
 
-    const file     = files[index];
+    const file = files[index];
     const formData = new FormData();
     formData.append('file', file);
 
     fetch(app.forum.attribute('apiUrl') + '/stickers/upload', {
-      method:  'POST',
+      method: 'POST',
       headers: { 'X-CSRF-Token': app.session.csrfToken },
-      body:    formData,
+      body: formData,
     })
       .then((r) => r.json())
       .then((data) => {
         if (!data.path) throw new Error(data.error || 'Upload failed');
 
         const title = emojiToTitle(file.name);
-        const slug  = emojiToSlug(file.name.replace(/\.[^.]+$/, ''));
+        const slug = emojiToSlug(file.name.replace(/\.[^.]+$/, ''));
 
         return app.store.createRecord('stickers').save({
           title,
           textToReplace: ':' + slug + ':',
-          path:          data.path,
+          path: data.path,
           category,
           categoryName,
         });
@@ -273,7 +280,10 @@ export default class StickerSection extends Component {
       }
 
       const sticker = state.stickers.find((s) => s.id() === ids[i]);
-      if (!sticker) { deleteNext(i + 1); return; }
+      if (!sticker) {
+        deleteNext(i + 1);
+        return;
+      }
 
       sticker
         .delete()
@@ -291,7 +301,7 @@ export default class StickerSection extends Component {
 
   setHoverPlay(value) {
     this.hoverPlayEnabled = value;
-    this.savingHoverPlay  = true;
+    this.savingHoverPlay = true;
     m.redraw();
 
     app
@@ -300,12 +310,15 @@ export default class StickerSection extends Component {
         url: app.forum.attribute('apiUrl') + '/settings',
         body: { 'ramon-stickers.hover-play': value ? '1' : '0' },
       })
-      .finally(() => { this.savingHoverPlay = false; m.redraw(); });
+      .finally(() => {
+        this.savingHoverPlay = false;
+        m.redraw();
+      });
   }
 
   setShowTooltip(value) {
     this.showTooltipEnabled = value;
-    this.savingShowTooltip  = true;
+    this.savingShowTooltip = true;
     m.redraw();
 
     app
@@ -314,7 +327,10 @@ export default class StickerSection extends Component {
         url: app.forum.attribute('apiUrl') + '/settings',
         body: { 'ramon-stickers.show-tooltip': value ? '1' : '0' },
       })
-      .finally(() => { this.savingShowTooltip = false; m.redraw(); });
+      .finally(() => {
+        this.savingShowTooltip = false;
+        m.redraw();
+      });
   }
 
   // ---------------------------------------------------------------------------
@@ -322,8 +338,8 @@ export default class StickerSection extends Component {
   // ---------------------------------------------------------------------------
 
   topItems() {
-    const items    = new ItemList();
-    const state    = app.stickerListState;
+    const items = new ItemList();
+    const state = app.stickerListState;
     const selecting = state.selectionMode;
 
     if (selecting) {
@@ -360,11 +376,7 @@ export default class StickerSection extends Component {
       // ── Normal mode ──
       items.add(
         'import',
-        <Button
-          className="Button Button--secondary StickerSection-btn"
-          icon="fas fa-file-import"
-          onclick={() => this.importStickerList()}
-        >
+        <Button className="Button Button--secondary StickerSection-btn" icon="fas fa-file-import" onclick={() => this.importStickerList()}>
           {app.translator.trans('ramon-stickers.admin.sticker_section.import_button')}
         </Button>,
         40
@@ -400,11 +412,7 @@ export default class StickerSection extends Component {
 
       items.add(
         'select',
-        <Button
-          className="Button Button--secondary StickerSection-btn"
-          icon="fas fa-check-square"
-          onclick={() => state.enterSelectionMode()}
-        >
+        <Button className="Button Button--secondary StickerSection-btn" icon="fas fa-check-square" onclick={() => state.enterSelectionMode()}>
           {app.translator.trans('ramon-stickers.admin.sticker_section.select_button')}
         </Button>,
         10
@@ -425,9 +433,7 @@ export default class StickerSection extends Component {
     if (s.active) {
       return (
         <div className="StickerSection-notice StickerSection-notice--loading">
-          <i className="fas fa-spinner fa-spin" />
-          {' '}
-          {app.translator.trans('ramon-stickers.admin.sticker_section.importing_message')}
+          <i className="fas fa-spinner fa-spin" /> {app.translator.trans('ramon-stickers.admin.sticker_section.importing_message')}
         </div>
       );
     }
@@ -435,8 +441,7 @@ export default class StickerSection extends Component {
     if (s.error) {
       return (
         <div className="StickerSection-notice StickerSection-notice--error">
-          <i className="fas fa-exclamation-circle" />
-          {' '}
+          <i className="fas fa-exclamation-circle" />{' '}
           {app.translator.trans('ramon-stickers.admin.sticker_section.import_error_message', { error: s.error })}
         </div>
       );
@@ -444,11 +449,10 @@ export default class StickerSection extends Component {
 
     return (
       <div className="StickerSection-notice StickerSection-notice--success">
-        <i className="fas fa-check-circle" />
-        {' '}
+        <i className="fas fa-check-circle" />{' '}
         {app.translator.trans('ramon-stickers.admin.sticker_section.import_result', {
           imported: s.imported,
-          skipped:  s.skipped,
+          skipped: s.skipped,
         })}
       </div>
     );
@@ -461,11 +465,10 @@ export default class StickerSection extends Component {
     if (u.active) {
       return (
         <div className="StickerSection-notice StickerSection-notice--loading">
-          <i className="fas fa-spinner fa-spin" />
-          {' '}
+          <i className="fas fa-spinner fa-spin" />{' '}
           {app.translator.trans('ramon-stickers.admin.sticker_section.bulk_upload_progress', {
             current: u.current,
-            total:   u.total,
+            total: u.total,
           })}
         </div>
       );
@@ -473,11 +476,10 @@ export default class StickerSection extends Component {
 
     return (
       <div className="StickerSection-notice StickerSection-notice--success">
-        <i className="fas fa-check-circle" />
-        {' '}
+        <i className="fas fa-check-circle" />{' '}
         {app.translator.trans('ramon-stickers.admin.sticker_section.bulk_upload_done', {
           uploaded: u.total - u.errors,
-          errors:   u.errors,
+          errors: u.errors,
         })}
       </div>
     );
@@ -488,7 +490,6 @@ export default class StickerSection extends Component {
   view() {
     return (
       <div className="ExtensionPage-stickerSection">
-
         {/* ── Header ── */}
         <div className="StickerSection-header">
           <div className="container">
@@ -509,29 +510,17 @@ export default class StickerSection extends Component {
         <div className="StickerSection-settingsBar">
           <div className="container">
             <label className="StickerSection-settingRow">
-              <Switch
-                state={this.hoverPlayEnabled}
-                loading={this.savingHoverPlay}
-                onchange={(val) => this.setHoverPlay(val)}
-              />
+              <Switch state={this.hoverPlayEnabled} loading={this.savingHoverPlay} onchange={(val) => this.setHoverPlay(val)} />
               <span className="StickerSection-settingLabel">
                 <strong>{app.translator.trans('ramon-stickers.admin.settings.hover_play_label')}</strong>
-                <span className="helpText">
-                  {app.translator.trans('ramon-stickers.admin.settings.hover_play_help')}
-                </span>
+                <span className="helpText">{app.translator.trans('ramon-stickers.admin.settings.hover_play_help')}</span>
               </span>
             </label>
             <label className="StickerSection-settingRow">
-              <Switch
-                state={this.showTooltipEnabled}
-                loading={this.savingShowTooltip}
-                onchange={(val) => this.setShowTooltip(val)}
-              />
+              <Switch state={this.showTooltipEnabled} loading={this.savingShowTooltip} onchange={(val) => this.setShowTooltip(val)} />
               <span className="StickerSection-settingLabel">
                 <strong>{app.translator.trans('ramon-stickers.admin.settings.show_tooltip_label')}</strong>
-                <span className="helpText">
-                  {app.translator.trans('ramon-stickers.admin.settings.show_tooltip_help')}
-                </span>
+                <span className="helpText">{app.translator.trans('ramon-stickers.admin.settings.show_tooltip_help')}</span>
               </span>
             </label>
           </div>
@@ -541,7 +530,6 @@ export default class StickerSection extends Component {
         <div className="container">
           <StickerList />
         </div>
-
       </div>
     );
   }

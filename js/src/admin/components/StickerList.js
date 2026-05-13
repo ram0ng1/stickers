@@ -22,13 +22,7 @@ const STICKER_ICON_PATH =
 
 function stickerSvgIcon(size = '1.5em') {
   return (
-    <svg
-      fill="currentColor"
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      style={{ width: size, height: size }}
-    >
+    <svg fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ width: size, height: size }}>
       <path d={STICKER_ICON_PATH} />
     </svg>
   );
@@ -42,7 +36,7 @@ function groupByCategory(stickers) {
   const map = new Map();
 
   stickers.forEach((sticker) => {
-    const key   = sticker.category()     || '';
+    const key = sticker.category() || '';
     const label = sticker.categoryName() || sticker.category() || '—';
 
     if (!map.has(key)) {
@@ -73,12 +67,12 @@ function sortGroupsByOrder(groups, order) {
 export default class StickerList extends Component {
   oninit(vnode) {
     super.oninit(vnode);
-    this.activeCategory   = null;
+    this.activeCategory = null;
     this.renamingCategory = null;
-    this.renameCode       = '';
-    this.renameName       = '';
-    this.renameLoading    = false;
-    this.renameError      = null;
+    this.renameCode = '';
+    this.renameName = '';
+    this.renameLoading = false;
+    this.renameError = null;
 
     // Saved category order (array of category keys)
     try {
@@ -98,8 +92,8 @@ export default class StickerList extends Component {
    * Persists immediately via the API.
    */
   moveCategory(key, direction, sortedGroups) {
-    const keys  = sortedGroups.map((g) => g.key);
-    const idx   = keys.indexOf(key);
+    const keys = sortedGroups.map((g) => g.key);
+    const idx = keys.indexOf(key);
     const newIdx = idx + direction;
 
     if (idx === -1 || newIdx < 0 || newIdx >= keys.length) return;
@@ -110,31 +104,34 @@ export default class StickerList extends Component {
     this.categoryOrder = keys;
     m.redraw();
 
-    app.request({
-      method : 'POST',
-      url    : app.forum.attribute('apiUrl') + '/stickers/category-order',
-      body   : { order: keys },
-    }).catch(() => {});
+    app
+      .request({
+        method: 'POST',
+        url: app.forum.attribute('apiUrl') + '/stickers/category-order',
+        body: { order: keys },
+      })
+      .catch(() => {});
   }
 
   startRename(group) {
     this.renamingCategory = group.key;
-    this.renameCode       = group.key;
-    this.renameName       = group.label !== '—' ? group.label : group.key;
-    this.renameError      = null;
+    this.renameCode = group.key;
+    this.renameName = group.label !== '—' ? group.label : group.key;
+    this.renameError = null;
     m.redraw();
   }
 
   cancelRename() {
     this.renamingCategory = null;
-    this.renameError      = null;
+    this.renameError = null;
     m.redraw();
   }
 
   sanitizeCategoryCode(raw) {
     return (raw || '')
       .toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
   }
@@ -150,17 +147,18 @@ export default class StickerList extends Component {
     }
 
     this.renameLoading = true;
-    this.renameError   = null;
+    this.renameError = null;
     m.redraw();
 
-    app.request({
-      method: 'POST',
-      url:    app.forum.attribute('apiUrl') + '/stickers/rename-category',
-      body:   { oldCategory: oldKey, newCategory: newCode, newCategoryName: newName },
-    })
+    app
+      .request({
+        method: 'POST',
+        url: app.forum.attribute('apiUrl') + '/stickers/rename-category',
+        body: { oldCategory: oldKey, newCategory: newCode, newCategoryName: newName },
+      })
       .then(() => {
         this.renamingCategory = null;
-        this.renameLoading    = false;
+        this.renameLoading = false;
         // If the renamed category was the active filter, follow the new key
         if (this.activeCategory === oldKey) this.activeCategory = newCode;
         app.stickerListState.stickers = [];
@@ -168,7 +166,7 @@ export default class StickerList extends Component {
       })
       .catch((err) => {
         this.renameLoading = false;
-        this.renameError   = err?.response?.errors?.[0]?.detail || 'Rename failed.';
+        this.renameError = err?.response?.errors?.[0]?.detail || 'Rename failed.';
         m.redraw();
       });
   }
@@ -208,8 +206,12 @@ export default class StickerList extends Component {
     });
   }
 
-  isLottiePath(path) { return path && path.toLowerCase().endsWith('.json'); }
-  isTgsPath(path)    { return path && path.toLowerCase().endsWith('.tgs'); }
+  isLottiePath(path) {
+    return path && path.toLowerCase().endsWith('.json');
+  }
+  isTgsPath(path) {
+    return path && path.toLowerCase().endsWith('.tgs');
+  }
 
   getStickerUrl(path) {
     if (!path) return '';
@@ -220,20 +222,17 @@ export default class StickerList extends Component {
    * Render a single sticker card (shared between category groups).
    */
   stickerCard(sticker) {
-    const state      = app.stickerListState;
-    const selecting  = state.selectionMode;
-    const path       = sticker.path() || '';
-    const url        = this.getStickerUrl(path);
-    const isLottie   = this.isLottiePath(path);
-    const isTgs      = this.isTgsPath(path);
-    const selected   = selecting && state.isSelected(sticker.id());
+    const state = app.stickerListState;
+    const selecting = state.selectionMode;
+    const path = sticker.path() || '';
+    const url = this.getStickerUrl(path);
+    const isLottie = this.isLottiePath(path);
+    const isTgs = this.isTgsPath(path);
+    const selected = selecting && state.isSelected(sticker.id());
 
     return (
       <li key={sticker.id()}>
-        <div
-          className={'customSticker' + (selected ? ' is-selected' : '')}
-          onclick={selecting ? () => state.toggleSelect(sticker.id()) : null}
-        >
+        <div className={'customSticker' + (selected ? ' is-selected' : '')} onclick={selecting ? () => state.toggleSelect(sticker.id()) : null}>
           {/* Selection indicator (only in selection mode) */}
           {selecting && (
             <div className={'customSticker-selectMark' + (selected ? ' is-selected' : '')}>
@@ -252,24 +251,11 @@ export default class StickerList extends Component {
 
           <div className="customSticker-imageWrapper">
             {isLottie ? (
-              <div
-                data-lottie-url={url}
-                className="customSticker-player"
-                title={sticker.textToReplace()}
-              />
+              <div data-lottie-url={url} className="customSticker-player" title={sticker.textToReplace()} />
             ) : isTgs ? (
-              <div
-                data-tgs-url={url}
-                className="customSticker-player"
-                title={sticker.textToReplace()}
-              />
+              <div data-tgs-url={url} className="customSticker-player" title={sticker.textToReplace()} />
             ) : (
-              <img
-                src={url}
-                className="customSticker-image"
-                alt={sticker.title()}
-                title={sticker.textToReplace()}
-              />
+              <img src={url} className="customSticker-image" alt={sticker.title()} title={sticker.textToReplace()} />
             )}
           </div>
 
@@ -282,27 +268,20 @@ export default class StickerList extends Component {
   }
 
   view() {
-    const state      = app.stickerListState;
-    const selecting  = state.selectionMode;
-    const allGroups    = sortGroupsByOrder(groupByCategory(state.stickers), this.categoryOrder);
+    const state = app.stickerListState;
+    const selecting = state.selectionMode;
+    const allGroups = sortGroupsByOrder(groupByCategory(state.stickers), this.categoryOrder);
 
     // Filter groups by active category tab (null = show all)
-    const visibleGroups = this.activeCategory === null
-      ? allGroups
-      : allGroups.filter((g) => g.key === this.activeCategory);
+    const visibleGroups = this.activeCategory === null ? allGroups : allGroups.filter((g) => g.key === this.activeCategory);
 
     return (
       <div className={'sticker-list' + (selecting ? ' StickerList--selecting' : '')}>
-        {state.isLoading() && state.stickers.length === 0
-          ? <LoadingIndicator display="unset" size="large" />
-          : ''}
+        {state.isLoading() && state.stickers.length === 0 ? <LoadingIndicator display="unset" size="large" /> : ''}
 
         {/* Add sticker button — always at the top, above all categories */}
         {!selecting && (
-          <button
-            className="StickerAddButton"
-            onclick={() => app.modal.show(EditStickerModal)}
-          >
+          <button className="StickerAddButton" onclick={() => app.modal.show(EditStickerModal)}>
             <span className="StickerAddButton-icon">{stickerSvgIcon('1.1em')}</span>
             <span className="StickerAddButton-label">Add sticker</span>
           </button>
@@ -313,7 +292,10 @@ export default class StickerList extends Component {
           <div className="StickerCategoryFilter">
             <button
               className={'StickerCategoryFilter-tab' + (this.activeCategory === null ? ' active' : '')}
-              onclick={() => { this.activeCategory = null; m.redraw(); }}
+              onclick={() => {
+                this.activeCategory = null;
+                m.redraw();
+              }}
             >
               All
               <span className="StickerCategoryFilter-count">{state.stickers.length}</span>
@@ -323,7 +305,10 @@ export default class StickerList extends Component {
               <button
                 key={group.key}
                 className={'StickerCategoryFilter-tab' + (this.activeCategory === group.key ? ' active' : '')}
-                onclick={() => { this.activeCategory = group.key; m.redraw(); }}
+                onclick={() => {
+                  this.activeCategory = group.key;
+                  m.redraw();
+                }}
               >
                 {group.label}
                 <span className="StickerCategoryFilter-count">{group.stickers.length}</span>
@@ -335,100 +320,90 @@ export default class StickerList extends Component {
         {/* Category groups (filtered) */}
         {visibleGroups.map((group) => (
           <div key={group.key} className="StickerCategory">
-            {this.renamingCategory === group.key
-              ? /* ── Inline rename form ── */
-                <div className="StickerCategory-renameForm">
-                  <div className="StickerCategory-renameFields">
-                    <input
-                      className="FormControl FormControl--small"
-                      placeholder="category_code"
-                      value={this.renameCode}
-                      oninput={(e) => { this.renameCode = e.target.value; }}
-                    />
-                    <input
-                      className="FormControl FormControl--small"
-                      placeholder="Display name"
-                      value={this.renameName}
-                      oninput={(e) => { this.renameName = e.target.value; }}
-                      onkeydown={(e) => { if (e.key === 'Enter') this.saveRename(group.key); if (e.key === 'Escape') this.cancelRename(); }}
-                    />
-                  </div>
-
-                  {this.renameError && (
-                    <p className="StickerCategory-renameError">{this.renameError}</p>
-                  )}
-
-                  <div className="StickerCategory-renameActions">
-                    <Button
-                      className="Button Button--primary Button--sm"
-                      loading={this.renameLoading}
-                      disabled={this.renameLoading}
-                      onclick={() => this.saveRename(group.key)}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      className="Button Button--sm"
-                      disabled={this.renameLoading}
-                      onclick={() => this.cancelRename()}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
+            {this.renamingCategory === group.key ? (
+              /* ── Inline rename form ── */
+              <div className="StickerCategory-renameForm">
+                <div className="StickerCategory-renameFields">
+                  <input
+                    className="FormControl FormControl--small"
+                    placeholder="category_code"
+                    value={this.renameCode}
+                    oninput={(e) => {
+                      this.renameCode = e.target.value;
+                    }}
+                  />
+                  <input
+                    className="FormControl FormControl--small"
+                    placeholder="Display name"
+                    value={this.renameName}
+                    oninput={(e) => {
+                      this.renameName = e.target.value;
+                    }}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter') this.saveRename(group.key);
+                      if (e.key === 'Escape') this.cancelRename();
+                    }}
+                  />
                 </div>
 
-              : /* ── Normal header ── */
-                <div className="StickerCategory-header">
-                  <h3>{group.label}</h3>
-                  <span className="StickerCategory-header-count">{group.stickers.length}</span>
+                {this.renameError && <p className="StickerCategory-renameError">{this.renameError}</p>}
 
-                  {!selecting && this.activeCategory === null && (
-                    <span className="StickerCategory-orderBtns">
-                      <button
-                        className="StickerCategory-orderBtn"
-                        title="Move up"
-                        disabled={visibleGroups.indexOf(group) === 0}
-                        onclick={() => this.moveCategory(group.key, -1, visibleGroups)}
-                      >
-                        <i className="fas fa-chevron-up" />
-                      </button>
-                      <button
-                        className="StickerCategory-orderBtn"
-                        title="Move down"
-                        disabled={visibleGroups.indexOf(group) === visibleGroups.length - 1}
-                        onclick={() => this.moveCategory(group.key, 1, visibleGroups)}
-                      >
-                        <i className="fas fa-chevron-down" />
-                      </button>
-                    </span>
-                  )}
+                <div className="StickerCategory-renameActions">
+                  <Button
+                    className="Button Button--primary Button--sm"
+                    loading={this.renameLoading}
+                    disabled={this.renameLoading}
+                    onclick={() => this.saveRename(group.key)}
+                  >
+                    Save
+                  </Button>
+                  <Button className="Button Button--sm" disabled={this.renameLoading} onclick={() => this.cancelRename()}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              /* ── Normal header ── */
+              <div className="StickerCategory-header">
+                <h3>{group.label}</h3>
+                <span className="StickerCategory-header-count">{group.stickers.length}</span>
 
-                  {!selecting && (
+                {!selecting && this.activeCategory === null && (
+                  <span className="StickerCategory-orderBtns">
                     <button
-                      className="StickerCategory-renameBtn"
-                      title="Rename category"
-                      onclick={() => this.startRename(group)}
+                      className="StickerCategory-orderBtn"
+                      title="Move up"
+                      disabled={visibleGroups.indexOf(group) === 0}
+                      onclick={() => this.moveCategory(group.key, -1, visibleGroups)}
                     >
-                      <i className="fas fa-pencil-alt" />
+                      <i className="fas fa-chevron-up" />
                     </button>
-                  )}
-                </div>
-            }
+                    <button
+                      className="StickerCategory-orderBtn"
+                      title="Move down"
+                      disabled={visibleGroups.indexOf(group) === visibleGroups.length - 1}
+                      onclick={() => this.moveCategory(group.key, 1, visibleGroups)}
+                    >
+                      <i className="fas fa-chevron-down" />
+                    </button>
+                  </span>
+                )}
 
-            <ul className="StickerCategory-grid">
-              {group.stickers.map((sticker) => this.stickerCard(sticker))}
-            </ul>
+                {!selecting && (
+                  <button className="StickerCategory-renameBtn" title="Rename category" onclick={() => this.startRename(group)}>
+                    <i className="fas fa-pencil-alt" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            <ul className="StickerCategory-grid">{group.stickers.map((sticker) => this.stickerCard(sticker))}</ul>
           </div>
         ))}
 
         {state.hasMoreResults() && !selecting && (
           <div className="sticker-loadMore">
-            <Button
-              className="Button Button--primary"
-              disabled={state.isLoading()}
-              loading={state.isLoading()}
-              onclick={() => state.loadMore()}
-            >
+            <Button className="Button Button--primary" disabled={state.isLoading()} loading={state.isLoading()} onclick={() => state.loadMore()}>
               {app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.load_more_button')}
             </Button>
           </div>
@@ -440,8 +415,7 @@ export default class StickerList extends Component {
           return p.endsWith('.json') || p.endsWith('.tgs');
         }) && (
           <p className="StickerList-animLib">
-            <i className="fas fa-info-circle" />{' '}
-            Animated previews rendered via <strong>{ANIM_LIB}</strong>{' '}
+            <i className="fas fa-info-circle" /> Animated previews rendered via <strong>{ANIM_LIB}</strong>{' '}
             <span className="StickerList-animLib-detail">(canvas renderer)</span>
           </p>
         )}
