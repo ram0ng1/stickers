@@ -77,9 +77,10 @@ jobs:
           tools: composer:v2
 
       - name: Validate composer.json
-        # `--no-check-version` silences the "version field is present" warning —
-        # the field is kept intentionally so EndBug/version-check in the release
-        # workflow can detect bumps. All other warnings remain fatal.
+        # composer.json has NO "version" field on purpose — the single source of
+        # truth is the VCS tag (the release workflow derives the next version
+        # from the latest git tag). `--no-check-version` keeps validate happy
+        # whether or not the field is present. All other warnings remain fatal.
         run: composer validate --strict --no-check-publish --no-check-version
 
       - name: Pin Flarum core version
