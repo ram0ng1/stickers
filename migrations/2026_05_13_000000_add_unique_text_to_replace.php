@@ -44,18 +44,28 @@ return [
             }
         }
 
-        // 2) Add the unique index. Skip if already added (idempotency for re-runs).
-        $alreadyIndexed = collect($connection->select(
-            "SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
-             WHERE TABLE_SCHEMA = DATABASE()
-               AND TABLE_NAME = 'stickers'
-               AND INDEX_NAME = 'stickers_text_to_replace_unique'"
-        ))->isNotEmpty();
-
-        if (! $alreadyIndexed) {
+        // 2) Add the unique index idempotently. Previously we read
+        //    INFORMATION_SCHEMA.STATISTICS to detect the existing index, but that
+        //    is MySQL-specific and breaks on any non-MySQL backend Flarum may end
+        //    up supporting (PostgreSQL ships INFORMATION_SCHEMA but populates it
+        //    differently; SQLite has no INFORMATION_SCHEMA at all).
+        //
+        //    Instead we just try to add the index and swallow the "already exists"
+        //    error — portable across every driver. Any OTHER error still bubbles
+        //    up so dirty-state failures stay visible.
+        try {
             $schema->table('stickers', function (Blueprint $table) {
                 $table->unique('text_to_replace');
             });
+        } catch (\Throwable $e) {
+            $message = strtolower($e->getMessage());
+            // MySQL: "Duplicate key name", SQLite: "index ... already exists",
+            // PostgreSQL: "relation ... already exists".
+            $alreadyExists = str_contains($message, 'duplicate key name')
+                || str_contains($message, 'already exists');
+            if (! $alreadyExists) {
+                throw $e;
+            }
         }
     },
 
@@ -63,8 +73,12 @@ return [
         if (! $schema->hasTable('stickers')) {
             return;
         }
-        $schema->table('stickers', function (Blueprint $table) {
-            $table->dropUnique(['text_to_replace']);
-        });
+        try {
+            $schema->table('stickers', function (Blueprint $table) {
+                $table->dropUnique(['text_to_replace']);
+            });
+        } catch (\Throwable $e) {
+            // If the index isn't there, rollback should still succeed.
+        }
     },
 ];
