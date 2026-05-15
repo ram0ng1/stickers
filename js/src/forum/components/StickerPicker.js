@@ -3,6 +3,7 @@ import Component from 'flarum/common/Component';
 import urlChecker from '../../common/utils/urlChecker';
 import { renderLottie } from '../../common/utils/renderLottie';
 import { renderTgs } from '../../common/utils/renderTgs';
+import { isLottiePath, isTgsPath } from '../../common/utils/stickerPath';
 
 /**
  * The StickerPicker component renders the floating sticker panel.
@@ -38,14 +39,42 @@ export default class StickerPicker extends Component {
   }
 
   loadStickers() {
-    app
-      .request({ method: 'GET', url: app.forum.attribute('apiUrl') + '/stickers?page[limit]=500' })
-      .then((response) => {
-        const baseUrl = app.forum.attribute('baseUrl');
+    // Paginate through every page instead of relying on a hard-coded `page[limit]=500`
+    // cap. Communities with more than 500 stickers used to see the rest silently
+    // hidden. PAGE_SIZE is the per-request batch — keep it reasonable so the API
+    // stays responsive on shared hosts.
+    const PAGE_SIZE = 200;
+    // Safety cap so a runaway server response can't loop forever. 100 pages × 200
+    // = 20,000 stickers, which is far beyond any realistic forum library; if a
+    // forum genuinely grows past this we'd want a search-driven picker anyway.
+    const MAX_PAGES = 100;
+    const baseUrl = app.forum.attribute('baseUrl');
+    const apiUrl = app.forum.attribute('apiUrl');
+    const collected = [];
 
-        this.stickers = (response.data || []).map((item) => {
+    const fetchPage = (offset, pageNumber) => {
+      if (pageNumber > MAX_PAGES) return Promise.resolve();
+
+      return app
+        .request({
+          method: 'GET',
+          url: `${apiUrl}/stickers?page[limit]=${PAGE_SIZE}&page[offset]=${offset}`,
+        })
+        .then((response) => {
+          const rows = response.data || [];
+          rows.forEach((item) => collected.push(item));
+
+          const hasNext = !!(response.links && response.links.next);
+          if (hasNext && rows.length > 0) {
+            return fetchPage(offset + rows.length, pageNumber + 1);
+          }
+        });
+    };
+
+    fetchPage(0, 1)
+      .then(() => {
+        this.stickers = collected.map((item) => {
           const path = item.attributes.path || '';
-          const lowerPath = path.toLowerCase();
           return {
             id: item.id,
             name: item.attributes.title,
@@ -53,8 +82,8 @@ export default class StickerPicker extends Component {
             url: urlChecker(path) ? path : baseUrl + path,
             category: item.attributes.category,
             categoryName: item.attributes.categoryName,
-            isLottie: lowerPath.endsWith('.json'),
-            isTgs: lowerPath.endsWith('.tgs'),
+            isLottie: isLottiePath(path),
+            isTgs: isTgsPath(path),
           };
         });
 

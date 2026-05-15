@@ -105,7 +105,13 @@ app.initializers.add('ramon-stickers', () => {
             if (state.isOpen) {
               closePicker(editor);
             } else {
-              openPicker(editor);
+              // Capture the clicked button so positionPicker anchors to the
+              // editor that was actually opened, not the first sticker button
+              // found anywhere in the document. Matters when multiple text
+              // editors are mounted at once (e.g. reply composer + edit-post
+              // form open simultaneously).
+              const triggerBtn = e.currentTarget?.closest('.Button-Sticker') || e.currentTarget;
+              openPicker(editor, triggerBtn);
             }
           },
         },
@@ -128,7 +134,7 @@ app.initializers.add('ramon-stickers', () => {
     // Do NOT call m.redraw() here – we're already inside Mithril's removal cycle
   });
 
-  function openPicker(editorInstance) {
+  function openPicker(editorInstance, triggerBtn) {
     const state = getState(editorInstance);
 
     // Create mount node if needed
@@ -138,6 +144,9 @@ app.initializers.add('ramon-stickers', () => {
       document.body.appendChild(state.mountNode);
     }
 
+    // Remember which button triggered the picker so positionPicker anchors to
+    // the right one when multiple text editors are mounted at once.
+    state.triggerBtn = triggerBtn || null;
     state.isOpen = true;
 
     const StickerPicker = require('./components/StickerPicker').default;
@@ -155,7 +164,7 @@ app.initializers.add('ramon-stickers', () => {
 
     // Position after Mithril has rendered (0ms = next event loop tick).
     // `bottom` anchor is used, so picker height doesn't affect vertical position.
-    setTimeout(() => positionPicker(state.mountNode), 0);
+    setTimeout(() => positionPicker(state.mountNode, state.triggerBtn), 0);
 
     m.redraw();
   }
@@ -173,8 +182,13 @@ app.initializers.add('ramon-stickers', () => {
     m.redraw();
   }
 
-  function positionPicker(mountNode) {
-    const btn = document.querySelector('.Button-Sticker');
+  function positionPicker(mountNode, triggerBtn) {
+    // Anchor to the button that opened THIS picker — fall back to a global
+    // querySelector only if we somehow lost the reference (defensive). Using
+    // document.querySelector unconditionally was a bug: with two composers open
+    // (e.g. a reply pane + an edit-post form), the picker always aligned to the
+    // first sticker button in the document, not the one the user clicked.
+    const btn = triggerBtn && document.body.contains(triggerBtn) ? triggerBtn : document.querySelector('.Button-Sticker');
     if (!btn || !mountNode) return;
 
     const rect = btn.getBoundingClientRect();
