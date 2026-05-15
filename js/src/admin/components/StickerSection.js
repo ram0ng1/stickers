@@ -9,6 +9,7 @@ import ItemList from 'flarum/common/utils/ItemList';
 import listItems from 'flarum/common/helpers/listItems';
 import StickerList from './StickerList';
 import EditStickerModal from './EditStickerModal';
+import { sanitizeCategoryCode } from '../../common/utils/stickerPath';
 
 export default class StickerSection extends Component {
   oninit(vnode) {
@@ -42,13 +43,25 @@ export default class StickerSection extends Component {
     this.exporting = true;
     m.redraw();
 
-    app
-      .request({ method: 'POST', url: app.forum.attribute('apiUrl') + '/stickers/export' })
+    // The export endpoint streams the ZIP directly as the response body
+    // (never base64-encoded in JSON — that was the memory blow-up the prior
+    // implementation hit on large libraries). Use raw fetch() so we can
+    // receive a Blob without app.request() forcing JSON parsing.
+    fetch(app.forum.attribute('apiUrl') + '/stickers/export', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRF-Token': app.session.csrfToken },
+    })
       .then((response) => {
-        const binary = atob(response.data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        saveAs(new Blob([bytes], { type: 'application/zip' }), response.filename || 'stickers.zip');
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+
+        // Pull the server-generated filename out of Content-Disposition.
+        // Fallback to a date-stamped name if the header is missing.
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename\s*=\s*"?([^"]+)"?/i);
+        const filename = match ? match[1] : `stickers-${new Date().toISOString().slice(0, 10)}.zip`;
+
+        return response.blob().then((blob) => saveAs(blob, filename));
       })
       .catch((err) => {
         console.error('[Stickers] Export failed:', err);
@@ -99,11 +112,36 @@ export default class StickerSection extends Component {
     xhr.withCredentials = true;
 
     xhr.onload = () => {
-      const data = JSON.parse(xhr.responseText);
       app.stickerListState.loading = false;
 
-      if (data.error) {
-        this.importState = { active: false, imported: 0, skipped: 0, total: 0, error: data.error };
+      // The server may respond with a non-JSON error body (e.g. a PHP fatal,
+      // a proxy timeout, an HTML 502). Catch JSON.parse so the UI surfaces a
+      // useful error instead of dying silently. Also treat any non-2xx status
+      // as an error even when the body is valid JSON.
+      let data;
+      try {
+        data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+      } catch (e) {
+        const snippet = (xhr.responseText || '').slice(0, 200);
+        this.importState = {
+          active: false,
+          imported: 0,
+          skipped: 0,
+          total: 0,
+          error: 'Server returned an unreadable response (status ' + xhr.status + '): ' + snippet,
+        };
+        m.redraw();
+        return;
+      }
+
+      if (xhr.status < 200 || xhr.status >= 300 || data.error) {
+        this.importState = {
+          active: false,
+          imported: 0,
+          skipped: 0,
+          total: 0,
+          error: data.error || 'HTTP ' + xhr.status,
+        };
         m.redraw();
         return;
       }
@@ -142,11 +180,29 @@ export default class StickerSection extends Component {
     reader.readAsText(file, 'UTF-8');
 
     reader.onload = (readerEvent) => {
+      // Catch malformed JSON before sending to the server — otherwise the
+      // exception was previously uncaught and the loading spinner spun forever.
+      let parsed;
+      try {
+        parsed = JSON.parse(readerEvent.target.result);
+      } catch (e) {
+        this.importState = {
+          active: false,
+          imported: 0,
+          skipped: 0,
+          total: 0,
+          error: 'Invalid JSON file: ' + e.message,
+        };
+        app.stickerListState.loading = false;
+        m.redraw();
+        return;
+      }
+
       app
         .request({
           method: 'POST',
           url: `${app.forum.attribute('apiUrl')}/stickers/import`,
-          body: { data: JSON.parse(readerEvent.target.result) },
+          body: { data: parsed },
         })
         .then((data) => {
           this.importState = { active: false, imported: data.imported, skipped: data.skipped, total: data.total, error: null };
@@ -178,12 +234,7 @@ export default class StickerSection extends Component {
     const categoryName = prompt(app.translator.trans('ramon-stickers.admin.sticker_section.bulk_upload_category_prompt'), 'Stickers');
     if (categoryName === null) return; // cancelled
 
-    const category = (categoryName || 'stickers')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // strip diacritics
-      .replace(/[^a-z0-9]+/g, '_') // dots, spaces, special chars → _
-      .replace(/^_+|_+$/g, ''); // trim leading/trailing _
+    const category = sanitizeCategoryCode(categoryName || 'stickers') || 'stickers';
     const catLabel = categoryName || 'Stickers';
 
     const input = document.createElement('input');

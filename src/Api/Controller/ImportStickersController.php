@@ -158,7 +158,12 @@ class ImportStickersController implements RequestHandlerInterface
         $imported = 0;
         $skipped  = 0;
 
-        foreach ($data as $item) {
+        // First pass: pre-validate every row in memory and collect the candidate
+        // text_to_replace values. We then issue ONE `WHERE IN (...)` query (chunked
+        // to respect MySQL placeholder limits) to find existing rows — instead of
+        // running an EXISTS round trip per row (CLAUDE.md §R-6: N+1 elimination).
+        $candidates = [];
+        foreach ($data as $i => $item) {
             if (! is_array($item)) {
                 $skipped++;
                 continue;
@@ -167,28 +172,65 @@ class ImportStickersController implements RequestHandlerInterface
             $textToReplace = trim((string) Arr::get($item, 'text_to_replace', ''));
             $path          = (string) Arr::get($item, 'path', '');
 
-            // Skip empties and validate path shape (must be either our local
-            // /assets/stickers/ path or an http(s) URL).
             if ($textToReplace === '' || ! $this->isValidStickerPath($path)) {
                 $skipped++;
                 continue;
             }
 
-            if (Sticker::where('text_to_replace', $textToReplace)->exists()) {
+            $candidates[$i] = [
+                'text_to_replace' => mb_substr($textToReplace, 0, 100),
+                'path'            => $path,
+                'item'            => $item,
+            ];
+        }
+
+        // Batch-fetch already-existing text_to_replace values in a single query
+        // per chunk of 500. We rely on the DB-level UNIQUE index added by
+        // 2026_05_13_000000_add_unique_text_to_replace as the authoritative guard
+        // against TOCTOU races (CLAUDE.md §R-3); this batch pre-check just
+        // short-circuits before issuing INSERTs that would fail anyway.
+        $existing = [];
+        $values = array_values(array_unique(array_column($candidates, 'text_to_replace')));
+        foreach (array_chunk($values, 500) as $chunk) {
+            $found = Sticker::whereIn('text_to_replace', $chunk)
+                ->pluck('text_to_replace')
+                ->all();
+            foreach ($found as $v) {
+                $existing[$v] = true;
+            }
+        }
+
+        // Track text_to_replace values introduced in this batch so duplicates
+        // INSIDE the same import are also detected without re-querying.
+        $seenInBatch = [];
+
+        foreach ($candidates as $row) {
+            $textToReplace = $row['text_to_replace'];
+
+            if (isset($existing[$textToReplace]) || isset($seenInBatch[$textToReplace])) {
                 $skipped++;
                 continue;
             }
 
+            $item = $row['item'];
             $sticker = Sticker::build(
                 mb_substr((string) Arr::get($item, 'category', ''), 0, 100),
                 mb_substr((string) Arr::get($item, 'category_name', ''), 0, 100),
                 mb_substr((string) Arr::get($item, 'title', ''), 0, 100),
-                mb_substr($textToReplace, 0, 100),
-                $path
+                $textToReplace,
+                $row['path']
             );
 
-            $sticker->save();
-            $imported++;
+            try {
+                $sticker->save();
+                $seenInBatch[$textToReplace] = true;
+                $imported++;
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Unique constraint violation — defensive fallback if a concurrent
+                // request inserted the same text_to_replace between our pre-check
+                // and the save. Counted as skipped, not an import failure.
+                $skipped++;
+            }
         }
 
         return new JsonResponse([

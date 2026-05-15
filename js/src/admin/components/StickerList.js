@@ -6,6 +6,7 @@ import EditStickerModal from './EditStickerModal';
 import urlChecker from '../../common/utils/urlChecker';
 import { renderLottie } from '../../common/utils/renderLottie';
 import { renderTgs } from '../../common/utils/renderTgs';
+import { isLottiePath, isTgsPath, sanitizeCategoryCode } from '../../common/utils/stickerPath';
 
 // Animated-sticker renderer: lottie-web (canvas renderer)
 // import path: lottie-web/build/player/lottie_canvas
@@ -127,17 +128,8 @@ export default class StickerList extends Component {
     m.redraw();
   }
 
-  sanitizeCategoryCode(raw) {
-    return (raw || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '');
-  }
-
   saveRename(oldKey) {
-    const newCode = this.sanitizeCategoryCode(this.renameCode);
+    const newCode = sanitizeCategoryCode(this.renameCode);
     const newName = this.renameName.trim() || newCode;
 
     if (!newCode) {
@@ -206,13 +198,6 @@ export default class StickerList extends Component {
     });
   }
 
-  isLottiePath(path) {
-    return path && path.toLowerCase().endsWith('.json');
-  }
-  isTgsPath(path) {
-    return path && path.toLowerCase().endsWith('.tgs');
-  }
-
   getStickerUrl(path) {
     if (!path) return '';
     return urlChecker(path) ? path : app.forum.attribute('baseUrl') + path;
@@ -226,8 +211,8 @@ export default class StickerList extends Component {
     const selecting = state.selectionMode;
     const path = sticker.path() || '';
     const url = this.getStickerUrl(path);
-    const isLottie = this.isLottiePath(path);
-    const isTgs = this.isTgsPath(path);
+    const isLottie = isLottiePath(path);
+    const isTgs = isTgsPath(path);
     const selected = selecting && state.isSelected(sticker.id());
 
     return (
