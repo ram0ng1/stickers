@@ -5,6 +5,7 @@
  * The container must be a regular HTML element (div/span), NOT a <canvas>.
  */
 import lottie from 'lottie-web/build/player/lottie_canvas';
+import { renderAnimFallback } from './animFallback';
 
 // Cap on raw JSON size: a Lottie payload of hundreds of MB would freeze the
 // tab while parsing. Real Lottie files are well under 1 MB.
@@ -107,7 +108,11 @@ export async function renderLottie(container, lottieUrl, options = {}) {
 
     return anim;
   } catch (err) {
+    // The most common cause is an external (cross-origin) .json URL — animated
+    // stickers must be self-hosted. Leaving the container empty hid the
+    // failure; render a visible fallback marker so it's noticeable instead.
     console.warn('[Stickers] Could not render Lottie:', lottieUrl, err);
+    renderAnimFallback(container, lottieUrl, err && err.message);
     return null;
   }
 }
