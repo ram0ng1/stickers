@@ -1,4 +1,5 @@
 import app from 'flarum/admin/app';
+import Alert from 'flarum/common/components/Alert';
 import Button from 'flarum/common/components/Button';
 import Component from 'flarum/common/Component';
 import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
@@ -7,19 +8,11 @@ import urlChecker from '../../common/utils/urlChecker';
 import { renderLottie } from '../../common/utils/renderLottie';
 import { renderTgs } from '../../common/utils/renderTgs';
 import { isLottiePath, isTgsPath, sanitizeCategoryCode } from '../../common/utils/stickerPath';
+import { STICKER_ICON_PATH } from '../../common/utils/stickerIcon';
 
 // Animated-sticker renderer: lottie-web (canvas renderer)
 // import path: lottie-web/build/player/lottie_canvas
 const ANIM_LIB = 'lottie-web';
-
-// Shared sticker shape SVG — same icon used in the forum toolbar
-const STICKER_ICON_PATH =
-  'M20,11.5 L20,7.5 C20,5.56700338 18.4329966,4 16.5,4 L7.5,4 C5.56700338,4 4,5.56700338 4,7.5 ' +
-  'L4,16.5 C4,18.4329966 5.56700338,20 7.5,20 L12.5,20 C13.3284271,20 14,19.3284271 14,18.5 ' +
-  'L14,16.5 C14,14.5670034 15.5670034,13 17.5,13 L18.5,13 C19.3284271,13 20,12.3284271 20,11.5 Z ' +
-  'M19.9266247,13.5532532 C19.522053,13.8348821 19.0303092,14 18.5,14 L17.5,14 ' +
-  'C16.1192881,14 15,15.1192881 15,16.5 L15,18.5 C15,18.9222858 14.8952995,19.3201175 14.7104416,19.668952 ' +
-  'C17.4490113,18.8255402 19.5186665,16.4560464 19.9266247,13.5532532 Z';
 
 function stickerSvgIcon(size = '1.5em') {
   return (
@@ -99,7 +92,10 @@ export default class StickerList extends Component {
 
     if (idx === -1 || newIdx < 0 || newIdx >= keys.length) return;
 
-    // Swap
+    // Capture the current order so we can roll back if the server rejects it.
+    const previousOrder = this.categoryOrder;
+
+    // Optimistic swap
     [keys[idx], keys[newIdx]] = [keys[newIdx], keys[idx]];
 
     this.categoryOrder = keys;
@@ -111,7 +107,15 @@ export default class StickerList extends Component {
         url: app.forum.attribute('apiUrl') + '/stickers/category-order',
         body: { order: keys },
       })
-      .catch(() => {});
+      .catch((err) => {
+        // Roll back the optimistic reorder and tell the user. Silently
+        // swallowing the error left the UI showing an order the server never
+        // persisted — it would silently revert on the next page load.
+        console.error('[Stickers] Category reorder failed:', err);
+        this.categoryOrder = previousOrder;
+        m.redraw();
+        app.alerts.show(Alert, { type: 'error' }, app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.move_category_error'));
+      });
   }
 
   startRename(group) {
