@@ -6,6 +6,7 @@
  * The container must be a regular HTML element (div/span), NOT a <canvas>.
  */
 import lottie from 'lottie-web/build/player/lottie_canvas';
+import { renderAnimFallback } from './animFallback';
 
 // Cap on decompressed size to defuse gzip bombs: a tiny .tgs that expands to
 // hundreds of MB would lock up the user's browser. Real TGS files are well
@@ -118,7 +119,11 @@ export async function renderTgs(container, tgsUrl, options = {}) {
       target.addEventListener('mouseleave', () => anim.goToAndStop(0, true));
     }
   } catch (err) {
+    // The most common cause is an external (cross-origin) .tgs URL — animated
+    // stickers must be self-hosted. Leaving the container empty hid the
+    // failure; render a visible fallback marker so it's noticeable instead.
     console.warn('[Stickers] Could not render TGS:', tgsUrl, err);
+    renderAnimFallback(container, tgsUrl, err && err.message);
   }
 }
 
