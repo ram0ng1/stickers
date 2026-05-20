@@ -1,6 +1,7 @@
 import app from 'flarum/admin/app';
 import { saveAs } from 'file-saver';
 import { emojiToSlug, emojiToTitle } from '../../common/utils/emojiFilename';
+import Alert from 'flarum/common/components/Alert';
 import Button from 'flarum/common/components/Button';
 import Switch from 'flarum/common/components/Switch';
 import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
@@ -321,29 +322,29 @@ export default class StickerSection extends Component {
     m.redraw();
 
     const ids = state.selectedArray.slice();
-    const deleteNext = (i) => {
-      if (i >= ids.length) {
-        this.deletingSelected = false;
+
+    // One bounded request instead of one DELETE per sticker — see
+    // BulkDeleteStickersController. The prior loop made N sequential round
+    // trips, which dragged on large selections.
+    app
+      .request({
+        method: 'POST',
+        url: app.forum.attribute('apiUrl') + '/stickers/bulk-delete',
+        body: { ids },
+      })
+      .then(() => {
+        ids.forEach((id) => state.removeFromList(id));
         state.exitSelectionMode();
         app.request({ method: 'DELETE', url: app.forum.attribute('apiUrl') + '/cache' }).catch(() => {});
+      })
+      .catch((err) => {
+        console.error('[Stickers] Bulk delete failed:', err);
+        app.alerts.show(Alert, { type: 'error' }, app.translator.trans('ramon-stickers.admin.sticker_section.delete_selected_error'));
+      })
+      .then(() => {
+        this.deletingSelected = false;
         m.redraw();
-        return;
-      }
-
-      const sticker = state.stickers.find((s) => s.id() === ids[i]);
-      if (!sticker) {
-        deleteNext(i + 1);
-        return;
-      }
-
-      sticker
-        .delete()
-        .then(() => state.removeFromList(ids[i]))
-        .catch((err) => console.error('[Stickers] Delete failed for', ids[i], err))
-        .finally(() => deleteNext(i + 1));
-    };
-
-    deleteNext(0);
+      });
   }
 
   // ---------------------------------------------------------------------------

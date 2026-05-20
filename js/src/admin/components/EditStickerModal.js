@@ -8,7 +8,7 @@ import urlChecker from '../../common/utils/urlChecker';
 import { renderLottie } from '../../common/utils/renderLottie';
 import { renderTgs } from '../../common/utils/renderTgs';
 import { emojiToSlug, emojiToTitle } from '../../common/utils/emojiFilename';
-import { isLottiePath, isTgsPath, sanitizeCategoryCode } from '../../common/utils/stickerPath';
+import { isLottiePath, isTgsPath, isAnimatedPath, sanitizeCategoryCode } from '../../common/utils/stickerPath';
 
 /**
  * Modal for adding or editing a sticker.
@@ -54,7 +54,7 @@ export default class EditStickerModal extends Modal {
       <div className="Form-group">
         <label>{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.sticker_category_label')}</label>
         <input className="FormControl" bidi={this.category} placeholder="my_category" />
-        <p className="helpText">Lowercase letters, numbers and underscores only. Special characters are sanitized automatically.</p>
+        <p className="helpText">{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.category_help')}</p>
       </div>,
       50
     );
@@ -140,12 +140,22 @@ export default class EditStickerModal extends Modal {
           <div className="StickerTgsNotice">
             <i className="fas fa-exclamation-triangle StickerTgsNotice-icon" />
             <div className="StickerTgsNotice-body">
-              <strong>License notice — TGS file</strong>
-              <p>
-                TGS files are Telegram animated stickers and may be subject to copyright or distribution restrictions imposed by their original
-                authors. By saving this sticker you confirm that you have the right to use and distribute this content, and you take full legal
-                responsibility for doing so.
-              </p>
+              <strong>{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.tgs_notice_title')}</strong>
+              <p>{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.tgs_notice_body')}</p>
+            </div>
+          </div>
+        )}
+
+        {/* External-URL warning — animated stickers must be same-origin to render
+            (see renderLottie.js / renderTgs.js). An admin pasting an external
+            https:// URL for a .json/.tgs would otherwise save a sticker that
+            silently never animates for visitors. */}
+        {urlChecker(this.path()) && isAnimatedPath(this.path()) && (
+          <div className="StickerTgsNotice">
+            <i className="fas fa-exclamation-triangle StickerTgsNotice-icon" />
+            <div className="StickerTgsNotice-body">
+              <strong>{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.external_anim_notice_title')}</strong>
+              <p>{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.external_anim_notice_body')}</p>
             </div>
           </div>
         )}
