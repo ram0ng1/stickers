@@ -5,6 +5,134 @@ import { renderLottie } from '../../common/utils/renderLottie';
 import { renderTgs } from '../../common/utils/renderTgs';
 import { isLottiePath, isTgsPath } from '../../common/utils/stickerPath';
 
+// ── Module-level catalog cache ──────────────────────────────────────────────
+// The picker is destroyed and re-created (m.mount) every time it opens, so
+// without a cache every open re-paginated the whole /stickers endpoint — 5-10
+// sequential requests on a large forum, on every single open. Stickers are
+// GLOBAL forum content (not actor-specific), so caching them at module scope
+// is safe — CLAUDE.md §27's module-state warning is specifically about
+// per-actor data. A short TTL lets sticker edits made elsewhere propagate into
+// a long-lived single-page session without a full reload.
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+let catalogCache = null; // { stickers, byCategory, categories }
+let catalogCachedAt = 0;
+let catalogInFlight = null; // dedupes concurrent opens before the first fetch resolves
+
+/**
+ * Shape the raw JSON:API rows into the structure the view consumes, grouped
+ * and ordered by category.
+ */
+function buildCatalog(collected) {
+  const baseUrl = app.forum.attribute('baseUrl');
+
+  const stickers = collected.map((item) => {
+    const path = item.attributes.path || '';
+    return {
+      id: item.id,
+      name: item.attributes.title,
+      textToReplace: item.attributes.textToReplace,
+      url: urlChecker(path) ? path : baseUrl + path,
+      category: item.attributes.category,
+      categoryName: item.attributes.categoryName,
+      isLottie: isLottiePath(path),
+      isTgs: isTgsPath(path),
+    };
+  });
+
+  let byCategory = stickers.reduce((acc, s) => {
+    const cat = s.category || 'default';
+    (acc[cat] = acc[cat] || []).push(s);
+    return acc;
+  }, {});
+
+  // Respect the admin-saved category order.
+  const savedOrder = (() => {
+    try {
+      return JSON.parse(app.forum.attribute('ramonStickersCategoryOrder') || '[]');
+    } catch {
+      return [];
+    }
+  })();
+
+  let categories = Object.keys(byCategory);
+  if (savedOrder.length) {
+    categories.sort((a, b) => {
+      const ia = savedOrder.indexOf(a);
+      const ib = savedOrder.indexOf(b);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+    // Rebuild byCategory in sorted order.
+    const sorted = {};
+    categories.forEach((k) => {
+      sorted[k] = byCategory[k];
+    });
+    byCategory = sorted;
+  }
+
+  return { stickers, byCategory, categories };
+}
+
+/**
+ * Paginate through every page of the /stickers endpoint and build the catalog.
+ * Hard-coded `page[limit]` caps silently hide stickers beyond the cap, so we
+ * follow `links.next` instead. MAX_PAGES is a runaway-server safety stop.
+ */
+function fetchCatalog() {
+  const PAGE_SIZE = 200;
+  const MAX_PAGES = 100; // 100 × 200 = 20,000 stickers — far beyond any realistic library.
+  const apiUrl = app.forum.attribute('apiUrl');
+  const collected = [];
+
+  const fetchPage = (offset, pageNumber) => {
+    if (pageNumber > MAX_PAGES) return Promise.resolve();
+
+    return app
+      .request({
+        method: 'GET',
+        url: `${apiUrl}/stickers?page[limit]=${PAGE_SIZE}&page[offset]=${offset}`,
+      })
+      .then((response) => {
+        const rows = response.data || [];
+        rows.forEach((item) => collected.push(item));
+
+        const hasNext = !!(response.links && response.links.next);
+        if (hasNext && rows.length > 0) {
+          return fetchPage(offset + rows.length, pageNumber + 1);
+        }
+      });
+  };
+
+  return fetchPage(0, 1).then(() => buildCatalog(collected));
+}
+
+/**
+ * Return the sticker catalog, served from the module cache when fresh.
+ * Concurrent callers share a single in-flight request.
+ */
+function loadCatalog() {
+  if (catalogCache && Date.now() - catalogCachedAt < CATALOG_TTL_MS) {
+    return Promise.resolve(catalogCache);
+  }
+  if (catalogInFlight) return catalogInFlight;
+
+  catalogInFlight = fetchCatalog()
+    .then((catalog) => {
+      catalogCache = catalog;
+      catalogCachedAt = Date.now();
+      catalogInFlight = null;
+      return catalog;
+    })
+    .catch((err) => {
+      catalogInFlight = null; // allow a retry on the next open
+      throw err;
+    });
+
+  return catalogInFlight;
+}
+
 /**
  * The StickerPicker component renders the floating sticker panel.
  *
@@ -39,88 +167,13 @@ export default class StickerPicker extends Component {
   }
 
   loadStickers() {
-    // Paginate through every page instead of relying on a hard-coded `page[limit]=500`
-    // cap. Communities with more than 500 stickers used to see the rest silently
-    // hidden. PAGE_SIZE is the per-request batch — keep it reasonable so the API
-    // stays responsive on shared hosts.
-    const PAGE_SIZE = 200;
-    // Safety cap so a runaway server response can't loop forever. 100 pages × 200
-    // = 20,000 stickers, which is far beyond any realistic forum library; if a
-    // forum genuinely grows past this we'd want a search-driven picker anyway.
-    const MAX_PAGES = 100;
-    const baseUrl = app.forum.attribute('baseUrl');
-    const apiUrl = app.forum.attribute('apiUrl');
-    const collected = [];
-
-    const fetchPage = (offset, pageNumber) => {
-      if (pageNumber > MAX_PAGES) return Promise.resolve();
-
-      return app
-        .request({
-          method: 'GET',
-          url: `${apiUrl}/stickers?page[limit]=${PAGE_SIZE}&page[offset]=${offset}`,
-        })
-        .then((response) => {
-          const rows = response.data || [];
-          rows.forEach((item) => collected.push(item));
-
-          const hasNext = !!(response.links && response.links.next);
-          if (hasNext && rows.length > 0) {
-            return fetchPage(offset + rows.length, pageNumber + 1);
-          }
-        });
-    };
-
-    fetchPage(0, 1)
-      .then(() => {
-        this.stickers = collected.map((item) => {
-          const path = item.attributes.path || '';
-          return {
-            id: item.id,
-            name: item.attributes.title,
-            textToReplace: item.attributes.textToReplace,
-            url: urlChecker(path) ? path : baseUrl + path,
-            category: item.attributes.category,
-            categoryName: item.attributes.categoryName,
-            isLottie: isLottiePath(path),
-            isTgs: isTgsPath(path),
-          };
-        });
-
-        this.byCategory = this.stickers.reduce((acc, s) => {
-          const cat = s.category || 'default';
-          (acc[cat] = acc[cat] || []).push(s);
-          return acc;
-        }, {});
-
-        // Respect the admin-saved category order
-        const savedOrder = (() => {
-          try {
-            return JSON.parse(app.forum.attribute('ramonStickersCategoryOrder') || '[]');
-          } catch {
-            return [];
-          }
-        })();
-
-        const allCats = Object.keys(this.byCategory);
-        if (savedOrder.length) {
-          allCats.sort((a, b) => {
-            const ia = savedOrder.indexOf(a);
-            const ib = savedOrder.indexOf(b);
-            if (ia === -1 && ib === -1) return 0;
-            if (ia === -1) return 1;
-            if (ib === -1) return -1;
-            return ia - ib;
-          });
-          // Rebuild byCategory in sorted order
-          const sorted = {};
-          allCats.forEach((k) => {
-            sorted[k] = this.byCategory[k];
-          });
-          this.byCategory = sorted;
-        }
-
-        this.activeCategory = allCats[0] || null;
+    // Served from the module-level cache when fresh — see loadCatalog() above.
+    // The picker no longer hits the API on every open.
+    loadCatalog()
+      .then((catalog) => {
+        this.stickers = catalog.stickers;
+        this.byCategory = catalog.byCategory;
+        this.activeCategory = catalog.categories[0] || null;
         this.loading = false;
         m.redraw();
 
