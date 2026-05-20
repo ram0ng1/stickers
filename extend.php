@@ -4,6 +4,7 @@ namespace Ramon\Stickers;
 
 use Flarum\Extend;
 use Ramon\Stickers\Api\Resource\StickerResource;
+use Ramon\Stickers\Api\Controller\BulkDeleteStickersController;
 use Ramon\Stickers\Api\Controller\ExportStickersController;
 use Ramon\Stickers\Api\Controller\ImportStickersController;
 use Ramon\Stickers\Api\Controller\RenameCategoryController;
@@ -38,7 +39,8 @@ return [
         ->post('/stickers/upload',           'stickers.upload',           UploadStickerController::class)
         ->post('/stickers/export',           'stickers.export',           ExportStickersController::class)
         ->post('/stickers/rename-category',  'stickers.renameCategory',   RenameCategoryController::class)
-        ->post('/stickers/category-order',   'stickers.categoryOrder',    SaveCategoryOrderController::class),
+        ->post('/stickers/category-order',   'stickers.categoryOrder',    SaveCategoryOrderController::class)
+        ->post('/stickers/bulk-delete',      'stickers.bulkDelete',       BulkDeleteStickersController::class),
 
     // CLAUDE.md §R-2 — per-actor rate limit on the heavy upload/import routes.
     (new Extend\ThrottleApi())
