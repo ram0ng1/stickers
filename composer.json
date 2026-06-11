@@ -1,6 +1,6 @@
 {
     "name": "ramon/stickers",
-    "description": "Sticker manager for Flarum with native support for animated TGS and Lottie stickers.",
+    "description": "Sticker picker for posts with animated Lottie and TGS support for Flarum 2",
     "keywords": [
         "flarum",
         "stickers",
