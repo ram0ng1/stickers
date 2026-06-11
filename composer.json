@@ -35,5 +35,8 @@
                 "color": "#fff"
             }
         }
+    },
+    "require-dev": {
+        "roave/security-advisories": "dev-latest"
     }
 }
