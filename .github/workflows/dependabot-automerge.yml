@@ -46,11 +46,29 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # O GITHUB_TOKEN do Actions não pode mesclar PR que altera
+      # .github/workflows/** (escopo `workflows`, não concedível via
+      # `permissions:`). Sem este guarda, o auto-merge é habilitado mas
+      # nunca conclui e o PR fica preso. Esses ficam para merge manual.
+      - name: Detectar alteração em workflow
+        id: wf
+        run: |
+          set -uo pipefail
+          if gh pr view "$PR_URL" --json files --jq '.files[].path' | grep -q '^\.github/workflows/'; then
+            echo "touches=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::PR altera .github/workflows/ — auto-merge pulado; mescle manualmente."
+          else
+            echo "touches=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # Aprova o PR para que o auto-merge consiga concluir mesmo quando o branch
       # protection exige um review aprovado. Gated em patch/minor — major nunca
       # é aprovado nem mesclado automaticamente.
       - name: Aprovar (patch + minor)
-        if: steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor'
+        if: steps.wf.outputs.touches == 'false' && (steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor')
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -59,7 +77,7 @@ jobs:
       # --auto: o GitHub funde sozinho quando os checks obrigatórios passarem
       # (CI verde). --delete-branch: remove a branch do Dependabot após o merge.
       - name: Habilitar auto-merge (patch + minor)
-        if: steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor'
+        if: steps.wf.outputs.touches == 'false' && (steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor')
         run: gh pr merge --auto --squash --delete-branch "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
