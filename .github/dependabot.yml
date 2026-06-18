@@ -1,64 +1,44 @@
-# CLAUDE.md §35.13/R1 — auto-PR for security and version bumps across all three
-# ecosystems used by this extension. Labels match .github/pr-labeler.yml so the
-# release-drafter changelog groups them correctly.
+# Dependabot: composer (/), npm (/js) e github-actions (/), semanal.
+# `groups` junta cada ecossistema num ÚNICO PR por semana — acaba com a
+# cascata de conflito de vários PRs de action tocando os mesmos arquivos de
+# workflow, e reduz o volume. Labels batem com .github/pr-labeler.yml.
 version: 2
 updates:
-  # PHP / Composer (extend.php, composer.json)
   - package-ecosystem: composer
     directory: /
     schedule:
       interval: weekly
       day: monday
-      time: '06:00'
-      timezone: 'America/Sao_Paulo'
     open-pull-requests-limit: 5
     labels:
       - dependencias
-    commit-message:
-      prefix: 'deps(composer)'
-      include: scope
     groups:
-      flarum-core:
+      composer:
         patterns:
-          - 'flarum/*'
+          - "*"
 
-  # JavaScript / npm (js/package.json)
   - package-ecosystem: npm
     directory: /js
     schedule:
       interval: weekly
       day: monday
-      time: '06:00'
-      timezone: 'America/Sao_Paulo'
     open-pull-requests-limit: 5
     labels:
       - dependencias
-    commit-message:
-      prefix: 'deps(npm)'
-      include: scope
     groups:
-      lottie:
+      npm:
         patterns:
-          - 'lottie-web*'
-      flarum-tooling:
-        patterns:
-          - 'flarum-*'
-          - 'webpack*'
-          - 'prettier'
+          - "*"
 
-  # GitHub Actions (.github/workflows/*.yml)
-  # Pinned by SHA per §35.13/C2 — Dependabot will bump the SHA AND update the
-  # trailing `# v4.x.y` comment, preserving the security pin.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
-      time: '06:00'
-      timezone: 'America/Sao_Paulo'
     open-pull-requests-limit: 5
     labels:
       - dependencias
-    commit-message:
-      prefix: 'deps(actions)'
-      include: scope
+    groups:
+      github-actions:
+        patterns:
+          - "*"
