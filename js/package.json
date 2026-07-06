@@ -10,9 +10,9 @@
   },
   "devDependencies": {
     "flarum-webpack-config": "^3.0.4",
-    "prettier": "^3.9.3",
-    "webpack": "^5.108.2",
-    "webpack-cli": "^7.1.0"
+    "prettier": "^3.9.4",
+    "webpack": "^5.108.4",
+    "webpack-cli": "^7.2.1"
   },
   "scripts": {
     "dev": "webpack --mode development --watch",
