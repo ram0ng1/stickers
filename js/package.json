@@ -9,8 +9,8 @@
     "node-emoji": "^2.2.0"
   },
   "devDependencies": {
-    "flarum-webpack-config": "^3.0.4",
-    "prettier": "^3.9.9",
+    "flarum-webpack-config": "^3.0.6",
+    "prettier": "^3.9.10",
     "webpack": "^5.111.1",
     "webpack-cli": "^7.2.3"
   },
