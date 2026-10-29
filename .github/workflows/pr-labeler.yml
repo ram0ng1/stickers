@@ -4,23 +4,31 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
 
-# CLAUDE.md §35.13/C1 — default-deny token scope at the workflow level.
+# 🔴 C1 — Default-deny no nível do workflow.
 permissions: {}
+
+# Evita stacking quando um PR é sincronizado várias vezes em sequência.
+concurrency:
+  group: pr-labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   label_pr:
-    name: Apply labels to the PR
+    name: Aplicar Labels no PR
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
     steps:
+      # 🟠 I3 — Harden-runner: job aplica labels via GITHUB_TOKEN.
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
+          allowed-endpoints: >
+            api.github.com:443
 
-      - name: Apply label based on branch
+      - name: Aplicar label baseada na branch
         uses: TimonVS/pr-labeler-action@f9c084306ce8b3f488a8f3ee1ccedc6da131d1af # v5.0.0
         with:
           configuration-path: .github/pr-labeler.yml

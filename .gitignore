@@ -1,6 +1,5 @@
 node_modules
 vendor
-js/dist/admin/
 composer.lock
 .vscode/settings.json
 .vscode
@@ -21,3 +20,8 @@ FLARUM_CSS_FONTS_MANAGEMENT.md
 DEAD_CODE_REFACTOR_PLAYBOOK.md
 SECURITY_AUDIT_PLAYBOOK.md
 AGENT.md
+# Testes
+.phpunit.cache
+.phpunit.result.cache
+tests/integration/tmp
+flarum_phpstan

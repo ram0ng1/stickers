@@ -3,37 +3,37 @@ tag-template: 'v$RESOLVED_VERSION'
 exclude-labels:
   - 'pular changelog'
 categories:
-  - title: 'Alterações Críticas (Breaking Changes)'
+  - title: '⚠️ Alterações Críticas (Breaking Changes)'
     labels:
       - 'BC'
-  - title: 'Melhoria'
+  - title: '🔨 Melhoria'
     labels:
       - 'melhoria'
-  - title: 'Correções de Erros'
+  - title: '🐞 Correções de Erros'
     labels:
       - 'correcao'
-  - title: 'Performance'
+  - title: '🚀 Performance'
     labels:
       - 'performance'
-  - title: 'Documentação'
+  - title: '📖 Documentação'
     labels:
       - 'documentacao'
-  - title: 'Refatoração'
+  - title: '♻️ Refatoração'
     labels:
       - 'refatoracao'
-  - title: 'Dependências'
+  - title: '📦 Dependências'
     labels:
       - 'dependencias'
-  - title: 'Traduções'
+  - title: '🌍 Traduções'
     labels:
       - 'traducao'
-  - title: 'Manutenção'
+  - title: '🔧 Manutenção'
     labels:
       - 'manutencao'
-# The release version is computed in release-management.yml from the latest
-# git tag (label "BC" => minor; any other => patch) and passed explicitly to
-# release-drafter via the `version` input. This resolver is fallback/docs only
-# and mirrors the same rule — no automatic "major".
+# A versão dos releases é calculada no release-management.yml a partir da
+# última tag git (label "BC" => minor; qualquer outra => patch) e passada
+# explicitamente ao release-drafter via input `version`. Este resolver fica
+# como fallback/documentação e espelha a mesma regra — sem "major" automático.
 version-resolver:
   minor:
     labels:
@@ -49,15 +49,11 @@ version-resolver:
       - 'traducao'
       - 'manutencao'
   default: patch
-change-template: '- $TITLE (PR #$NUMBER) por @$AUTHOR'
+# Links absolutos: o texto do release também é colado fora do GitHub.
+change-template: '- $TITLE ([#$NUMBER]($URL)) por [@$AUTHOR](https://github.com/$AUTHOR)'
+# "Como atualizar" não fica aqui: o release-management.yml monta esse bloco e o
+# passa como `footer`, incluindo `php flarum migrate` só quando a versão traz
+# migração nova.
 template: |
-  ## O que mudou na extensão Stickers
+  ## O que mudou na extensão Stickers 🌟
   $CHANGES
-
-  ## Como atualizar
-
-  ```bash
-  composer require ramon/stickers:$RESOLVED_VERSION
-  php flarum cache:clear
-  php flarum assets:publish
-  ```

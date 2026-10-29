@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * This file is part of ramon/stickers.
+ *
+ * Copyright (c) 2026 Ramon Guilherme.
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 namespace Ramon\Stickers\Api\Resource;
 
 use Flarum\Api\Endpoint;
@@ -9,12 +18,11 @@ use Flarum\Api\Sort\SortColumn;
 use Ramon\Stickers\Models\Sticker;
 
 /**
- * @extends AbstractDatabaseResource<Sticker>
+ * Todos os campos são públicos de propósito: o picker aparece até para
+ * visitantes e um sticker não tem dado pessoal. Campo só de admin, se surgir,
+ * precisa de `->visible()`.
  *
- * Note (CLAUDE.md §6, §I-3): every field on the Sticker model is intentionally public.
- * Stickers have NO PII — the StickerPicker is shown to guests too. If you ever add a
- * field with admin-only data (e.g. uploader IP, internal moderator note), gate it with
- * `->visible(fn ($s, $c) => $c->getActor()->isAdmin())`.
+ * @extends AbstractDatabaseResource<Sticker>
  */
 class StickerResource extends AbstractDatabaseResource
 {
@@ -31,13 +39,14 @@ class StickerResource extends AbstractDatabaseResource
     public function endpoints(): array
     {
         return [
-            // §I-1: public read by design — the picker is shown to guests too.
-            // No `->authenticated()` chained here — adding it would break the forum
-            // picker for guest visitors.
+            // Leitura pública: o picker também aparece para visitantes.
+            // Ordem fixa por id: sem ela a paginação por offset podia repetir ou
+            // pular stickers (no PostgreSQL a ordem sem ORDER BY não é estável).
+            // O picker pede páginas de 200; o teto padrão é 50.
             Endpoint\Index::make()
-                ->paginate(),
+                ->defaultSort('id')
+                ->paginate(20, 200),
 
-            // §I-2: single-sticker fetch — used by some admin flows.
             Endpoint\Show::make(),
 
             Endpoint\Create::make()
@@ -56,10 +65,12 @@ class StickerResource extends AbstractDatabaseResource
 
     public function fields(): array
     {
-        // CLAUDE.md §6 + §7 + §13: schema-level validation is the v2 mass-assignment
-        // guard AND the first line of defense against path traversal in stored data
-        // (the `path` regex prevents an admin-compromised account from setting
-        // `path = /../../etc/passwd` and exfiltrating via the export endpoint).
+        // requiredOnCreate(), como no core: um PATCH parcial (só o `path`, por
+        // exemplo) não precisa reenviar os outros campos.
+        //
+        // A validação do schema é a proteção contra mass assignment e a primeira
+        // barreira contra path traversal: o regex do `path` impede gravar algo
+        // como `/../../etc/passwd`, que a exportação leria.
         return [
             Schema\Str::make('title')
                 ->nullable()
@@ -68,24 +79,23 @@ class StickerResource extends AbstractDatabaseResource
 
             Schema\Str::make('textToReplace')
                 ->property('text_to_replace')
-                ->required()
+                ->requiredOnCreate()
                 ->maxLength(100)
-                ->regex('/^:[\w\-]+:$/i')                 // :slug: format
+                ->regex('/^:[\w\-]+:$/i')
                 ->unique('stickers', 'text_to_replace', true)
                 ->writable(),
 
             Schema\Str::make('path')
-                ->required()
+                ->requiredOnCreate()
                 ->maxLength(500)
-                // Either a confined local asset under /assets/stickers/ OR an http(s) URL.
-                // Same shape ImportStickersController::isValidStickerPath accepts.
+                // Arquivo em /assets/stickers/ ou URL http(s), como na importação.
                 ->regex('#^(/assets/stickers/[A-Za-z0-9._-]+|https?://[^\s]+)$#')
                 ->writable(),
 
             Schema\Str::make('category')
                 ->nullable()
                 ->maxLength(100)
-                ->regex('/^[a-z0-9_]*$/')                  // matches frontend sanitizeCategoryCode()
+                ->regex('/^[a-z0-9_]*$/')
                 ->writable(),
 
             Schema\Str::make('categoryName')

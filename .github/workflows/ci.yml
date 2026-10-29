@@ -1,149 +1,198 @@
 name: CI
 
+# Mesmo CI do tema Canela, ajustado ao Stickers: PHP (testes unitários, lint,
+# PHPStan, auditoria) numa matriz de versões e do flarum/core, auditoria do
+# npm e paridade das traduções. Os testes de integração (MySQL,
+# MariaDB, PostgreSQL e SQLite) ficam no backend.yml, o workflow do core/FoF.
 on:
   push:
     branches:
       - main
   pull_request:
   workflow_dispatch:
-  # Segunda 05:00 UTC: roda a CI mesmo sem push. Como os jobs resolvem as
-  # dependências com `composer update`, o agendamento testa automaticamente
-  # contra a versão mais nova do flarum/core e detecta quebras trazidas por
-  # novas versões do Flarum antes que cheguem a você.
+  # Segunda 05:00 UTC: roda mesmo sem push. Como as dependências vêm de
+  # `composer update`, isso testa contra o flarum/core mais novo e pega
+  # quebras de uma versão nova do Flarum antes de chegarem ao fórum.
   schedule:
     - cron: '0 5 * * 1'
 
-# CLAUDE.md §35.13/C1 — default-deny token scope at the workflow level.
+# Nega tudo ao GITHUB_TOKEN por padrão; cada job declara o que precisa.
 permissions: {}
 
-# CLAUDE.md §35.13/I4 — cancel stacked runs on the same ref.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # CLAUDE.md §35.13/I1 — block PRs that introduce dependencies with known CVEs.
-  dependency-review:
-    name: Dependency Review
+  # Valida o composer.json como está no repositório (antes de a matriz mexer
+  # na versão do core).
+  composer-validate:
+    name: composer validate (--strict)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2
         with:
           egress-policy: audit
+
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Review dependencies
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240  # v2
         with:
-          fail-on-severity: high
-          comment-summary-in-pr: on-failure
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validar composer.json
+        # Sem campo "version": as versões vêm das tags do git.
+        run: composer validate --strict --no-check-publish
 
   php:
-    name: PHP ${{ matrix.php }} × Flarum ${{ matrix.flarum-core }}
+    name: PHP ${{ matrix.php }} × flarum/core ${{ matrix.flarum-core }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        # CLAUDE.md §35.13/I5 — matrix against both supported Flarum branches.
-        # composer.json declares "^1.8.10 || ^2.0". Flarum 2.x requires PHP >=8.3,
-        # so 8.2 only runs against v1. Explicit include list keeps the matrix shape
-        # honest (no excludes needed).
-        include:
-          # Flarum v1 — works on all supported PHP versions
-          - { php: '8.2', flarum-core: '^1.8.10' }
-          - { php: '8.3', flarum-core: '^1.8.10' }
-          - { php: '8.4', flarum-core: '^1.8.10' }
-          # Flarum v2 RC — requires PHP ^8.3
-          - { php: '8.3', flarum-core: '^2.0.0-rc.1' }
-          - { php: '8.4', flarum-core: '^2.0.0-rc.1' }
-          # Flarum v2 dev branch — requires PHP ^8.3
-          - { php: '8.3', flarum-core: '2.x-dev' }
-          - { php: '8.4', flarum-core: '2.x-dev' }
+        # O flarum/core 2.x exige PHP ^8.3. O fórum de desenvolvimento roda 8.5.
+        php: ['8.3', '8.4', '8.5']
+        # A versão estável E a ponta do core.
+        flarum-core:
+          - '^2.0.0'
+          - '2.x-dev'
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2
         with:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Setup PHP ${{ matrix.php }}
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240  # v2
         with:
           php-version: ${{ matrix.php }}
+          extensions: dom, mbstring, fileinfo, gd, zip, pdo_mysql, pdo_sqlite
           coverage: none
           tools: composer:v2
 
-      - name: Validate composer.json
-        # composer.json has NO "version" field on purpose — the single source of
-        # truth is the VCS tag (the release workflow derives the next version
-        # from the latest git tag). `--no-check-version` keeps validate happy
-        # whether or not the field is present. All other warnings remain fatal.
-        run: composer validate --strict --no-check-publish --no-check-version
+      - name: Fixar o flarum/core desta célula
+        run: composer require --no-update "flarum/core:${{ matrix.flarum-core }}"
 
-      - name: Pin Flarum core version
-        # flarum/core is a RUNTIME dependency (lives in `require`, not `require-dev`).
-        # Using `composer require --dev` here would MOVE it to require-dev, which is
-        # wrong. Plain `composer require --no-update` updates the existing constraint
-        # in-place, then `composer update` resolves and installs.
-        run: |
-          composer require --no-update "flarum/core:${{ matrix.flarum-core }}"
-          composer update --prefer-stable --no-progress --no-interaction --no-scripts
+      - name: Resolver dependências (composer update)
+        # --ignore-platform-req=php+ ignora só o limite SUPERIOR de PHP (para a
+        # célula 8.5, se alguma dependência ainda não declarar suporte).
+        run: composer update --no-interaction --no-progress --prefer-stable --no-scripts --ignore-platform-req=php+
+
+      - name: Testes unitários
+        run: vendor/bin/phpunit -c tests/phpunit.unit.xml --testsuite unit
 
       - name: Lint PHP (php -l)
         run: |
           set -euo pipefail
-          mapfile -d '' files < <(find src migrations extend.php -name '*.php' -print0 2>/dev/null)
-          [ "${#files[@]}" -gt 0 ] || { echo "No PHP files found"; exit 1; }
+          mapfile -d '' files < <(find src migrations extend.php tests -name '*.php' -print0 2>/dev/null)
+          [ "${#files[@]}" -gt 0 ] || { echo "Nenhum arquivo PHP encontrado"; exit 1; }
           printf '%s\0' "${files[@]}" | xargs -0 -n1 -P4 php -l
 
       - name: composer audit
-        # CLAUDE.md §35.13/R2 — check the Packagist security advisories DB.
         run: composer audit --no-dev --format=plain
-        continue-on-error: true # advisories happen; flag but don't block
 
+      # PHPStan nível 6 com a extensão do Flarum (flarum/phpstan), sem
+      # baseline: o mesmo padrão do core e da FoF.
+      - name: PHPStan
+        if: matrix.php == '8.3' && matrix.flarum-core == '^2.0.0'
+        run: composer analyse:phpstan
+
+  # Formatação, tipos e build ficam no frontend.yml (o workflow do core);
+  # aqui só a auditoria das dependências JS.
   js:
-    name: JS (format, build, audit)
+    name: npm audit
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2
         with:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
         with:
           node-version: 20
           cache: 'npm'
           cache-dependency-path: js/package-lock.json
 
-      - name: Install JS dependencies
+      # Todo o node_modules é de build: o pacote publicado é js/dist/*.js.
+      # Bloqueia só o que chegaria à produção; o resto fica visível no log.
+      - name: npm audit (produção — bloqueia)
         working-directory: js
-        run: npm ci
+        run: npm audit --audit-level=high --omit=dev
 
-      - name: Prettier (format-check)
+      - name: npm audit (dev — informativo)
         working-directory: js
-        run: npm run format-check
-
-      - name: npm audit
-        working-directory: js
+        continue-on-error: true
         run: npm audit --audit-level=high
-        continue-on-error: true # advisories happen; flag but don't block
 
-      - name: Webpack (production build)
-        working-directory: js
-        run: npm run build
+  # Paridade das traduções (en ↔ pt-BR): não depende da versão do PHP/core.
+  locale:
+    name: Paridade das traduções
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240  # v2
+        with:
+          php-version: '8.3'
+          extensions: dom, mbstring
+          coverage: none
+          tools: composer:v2
+
+      - name: Resolver dependências (composer update)
+        run: composer update --no-interaction --no-progress --prefer-stable --no-scripts
+
+      - name: Chaves en ↔ pt-BR
+        run: vendor/bin/phpunit -c tests/phpunit.unit.xml --testsuite locale
+
+  # Reprova PRs que tragam dependências com vulnerabilidade conhecida. Só em
+  # repositório público: no privado a ação exige o GitHub Advanced Security
+  # (lá o `composer audit` da matriz já cobre as dependências PHP).
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && !github.event.repository.private
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure

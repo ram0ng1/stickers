@@ -1,4 +1,4 @@
-name: Sync Branches with Main
+name: Sincronizar Branches com Main
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
   workflow_dispatch:
 
-# CLAUDE.md §35.13/C1 — default-deny token scope at the workflow level.
+# 🔴 C1 — Default-deny no nível do workflow.
 permissions: {}
 
 concurrency:
@@ -15,28 +15,32 @@ concurrency:
 
 jobs:
   sync:
-    name: Sync branches with main
+    name: Sincronizar branches com main
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      # 🟠 I3 — Harden-runner: job faz push em branches via GITHUB_TOKEN.
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
 
-      - name: Checkout repository
+      - name: Checkout do repositório
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure Git
+      - name: Configurar Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Sync branches with main
+      - name: Sincronizar branches com main
         run: |
           git fetch --all
 
@@ -50,20 +54,20 @@ jobs:
             | tr -d ' ')
 
           for branch in $BRANCHES; do
-            echo "Syncing branch: $branch"
+            echo "▶ Sincronizando branch: $branch"
 
             git checkout -B "$branch" "origin/$branch"
 
             if ! git merge-base origin/main "origin/$branch" >/dev/null 2>&1; then
-              echo "Branch '$branch' sem histórico comum com main (pré-reescrita) — pulando"
+              echo "⚠️  '$branch' não compartilha histórico com main (pré-reescrita) — pulando"
               continue
             fi
 
             if git merge origin/main --no-edit -m "chore: sync with main"; then
               git push origin "$branch"
-              echo "Branch '$branch' synced successfully"
+              echo "✅ Branch '$branch' sincronizada com sucesso"
             else
-              echo "Conflict syncing '$branch' with main — skipping"
+              echo "⚠️  Conflito ao sincronizar '$branch' com main — pulando"
               git merge --abort 2>/dev/null || true
             fi
           done

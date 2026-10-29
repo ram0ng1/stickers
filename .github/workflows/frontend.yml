@@ -1,0 +1,31 @@
+name: Frontend (Flarum)
+
+# O workflow de frontend do core, o mesmo da FoF (flarum/framework
+# REUSABLE_frontend.yml): Prettier, TypeScript e build de produção. Em push no
+# main, commita o js/dist gerado, então o bundle publicado sempre corresponde
+# ao código-fonte.
+on: [workflow_dispatch, push, pull_request]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frontend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run:
+    # Fixado por SHA, como as outras actions do repositório (2.x).
+    uses: flarum/framework/.github/workflows/REUSABLE_frontend.yml@cdc86216fced7409f218f38808b7fd3fc7882b17  # 2.x
+    with:
+      enable_bundlewatch: false
+      enable_prettier: true
+      enable_typescript: true
+      enable_tests: false
+      # Sem typings publicados nem medição de cobertura de tipos.
+      build_typings_script: ''
+      type_coverage_script: ''
+      js_package_manager: npm
+      frontend_directory: ./js
+      backend_directory: .
+      main_git_branch: main
