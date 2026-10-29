@@ -1,13 +1,13 @@
 import app from 'flarum/forum/app';
 import { extend } from 'flarum/common/extend';
 import TextEditorButton from 'flarum/common/components/TextEditorButton';
-import Sticker from '../common/models/Sticker';
 import { initLottieInRoot } from '../common/utils/renderLottie';
 import { initTgsInRoot } from '../common/utils/renderTgs';
 import { STICKER_ICON_PATH } from '../common/utils/stickerIcon';
 
-// Size and vertical-align match FontAwesome solid icons inside .Button-icon spans.
-// FA renders at the span's font-size (1em) with -0.125em baseline correction.
+export { default as extend } from './extend';
+
+// Mesmo tamanho e alinhamento dos ícones do FontAwesome dentro de .Button-icon.
 const stickerIconVnode = () =>
   m(
     'svg',
@@ -22,9 +22,6 @@ const stickerIconVnode = () =>
   );
 
 app.initializers.add('ramon-stickers', () => {
-  app.store.models['stickers'] = Sticker;
-
-  // Read settings serialized from PHP via Settings extender
   function getAnimOptions() {
     const hoverPlay = !!app.forum.attribute('ramonStickersHoverPlay');
     return hoverPlay ? { hoverPlay: true } : {};
@@ -34,7 +31,6 @@ app.initializers.add('ramon-stickers', () => {
     return app.forum.attribute('ramonStickersShowTooltip') !== false;
   }
 
-  // Remove native `title` tooltip from sticker elements in a given root
   function applyTooltipSetting(root) {
     if (shouldShowTooltip()) return;
     (root || document).querySelectorAll('.Sticker[title]').forEach((el) => {
@@ -42,7 +38,6 @@ app.initializers.add('ramon-stickers', () => {
     });
   }
 
-  // Initialize animated stickers in posts via MutationObserver
   function initStickersInRoot(root) {
     const opts = getAnimOptions();
     initLottieInRoot(root, opts);
@@ -50,18 +45,24 @@ app.initializers.add('ramon-stickers', () => {
     applyTooltipSetting(root);
   }
 
+  // Os posts chegam pelo m.trust, sem hook do Mithril: o observer pega os nós
+  // novos. Só varre o que foi adicionado (a partir do pai, que cobre o caso de
+  // o próprio nó ser o sticker), não o documento inteiro a cada redraw.
   const observer = new MutationObserver((mutations) => {
-    let hasNew = false;
+    const roots = new Set();
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
-        if (node.nodeType === 1) hasNew = true;
+        if (node.nodeType === 1) roots.add(node.parentElement || node);
       });
     });
-    if (hasNew) initStickersInRoot(document.body);
+    roots.forEach((root) => {
+      if (root.isConnected) initStickersInRoot(root);
+    });
   });
   observer.observe(document.body, { childList: true, subtree: true });
+  initStickersInRoot(document.body);
 
-  // State: one picker per TextEditor instance, tracked via WeakMap
+  // Um picker por TextEditor.
   const instanceState = new WeakMap();
 
   function getState(instance) {
@@ -74,7 +75,6 @@ app.initializers.add('ramon-stickers', () => {
     return instanceState.get(instance);
   }
 
-  // Add sticker button to the TextEditor toolbar
   extend('flarum/common/components/TextEditor', 'toolbarItems', function (items) {
     const editor = this;
 
@@ -94,11 +94,8 @@ app.initializers.add('ramon-stickers', () => {
             if (state.isOpen) {
               closePicker(editor);
             } else {
-              // Capture the clicked button so positionPicker anchors to the
-              // editor that was actually opened, not the first sticker button
-              // found anywhere in the document. Matters when multiple text
-              // editors are mounted at once (e.g. reply composer + edit-post
-              // form open simultaneously).
+              // Guarda o botão clicado: com dois editores abertos (resposta +
+              // edição de post), o picker ancora no editor certo.
               const triggerBtn = e.currentTarget?.closest('.Button-Sticker') || e.currentTarget;
               openPicker(editor, triggerBtn);
             }
@@ -110,7 +107,6 @@ app.initializers.add('ramon-stickers', () => {
     );
   });
 
-  // Cleanup when the TextEditor is removed
   extend('flarum/common/components/TextEditor', 'onremove', function () {
     const state = getState(this);
     state.isOpen = false;
@@ -120,42 +116,42 @@ app.initializers.add('ramon-stickers', () => {
       state.mountNode.remove();
       state.mountNode = null;
     }
-    // Do NOT call m.redraw() here – we're already inside Mithril's removal cycle
+    // Sem m.redraw() aqui: já estamos dentro do ciclo de remoção do Mithril.
   });
 
   function openPicker(editorInstance, triggerBtn) {
     const state = getState(editorInstance);
 
-    // Create mount node if needed
     if (!state.mountNode) {
       state.mountNode = document.createElement('div');
       state.mountNode.className = 'StickerPicker-wrapper';
       document.body.appendChild(state.mountNode);
     }
 
-    // Remember which button triggered the picker so positionPicker anchors to
-    // the right one when multiple text editors are mounted at once.
     state.triggerBtn = triggerBtn || null;
     state.isOpen = true;
 
-    const StickerPicker = require('./components/StickerPicker').default;
+    // O picker fica num chunk próprio: só baixa no primeiro clique.
+    import('./components/StickerPicker').then(({ default: StickerPicker }) => {
+      // Fechou (ou o editor saiu) enquanto o chunk carregava.
+      if (!state.isOpen || !state.mountNode) return;
 
-    m.mount(state.mountNode, {
-      view: () =>
-        m(StickerPicker, {
-          onInsert: (text) => {
-            editorInstance.attrs.composer.editor.insertAtCursor(text);
-            closePicker(editorInstance);
-          },
-          onClose: () => closePicker(editorInstance),
-        }),
+      m.mount(state.mountNode, {
+        view: () =>
+          m(StickerPicker, {
+            onInsert: (text) => {
+              editorInstance.attrs.composer.editor.insertAtCursor(text);
+              closePicker(editorInstance);
+            },
+            onClose: () => closePicker(editorInstance),
+            triggerBtn: state.triggerBtn,
+          }),
+      });
+
+      // Posiciona no próximo tick, depois do render. A âncora é o `bottom`, então
+      // a altura do picker não importa.
+      setTimeout(() => positionPicker(state.mountNode, state.triggerBtn), 0);
     });
-
-    // Position after Mithril has rendered (0ms = next event loop tick).
-    // `bottom` anchor is used, so picker height doesn't affect vertical position.
-    setTimeout(() => positionPicker(state.mountNode, state.triggerBtn), 0);
-
-    m.redraw();
   }
 
   function closePicker(editorInstance) {
@@ -172,11 +168,6 @@ app.initializers.add('ramon-stickers', () => {
   }
 
   function positionPicker(mountNode, triggerBtn) {
-    // Anchor to the button that opened THIS picker — fall back to a global
-    // querySelector only if we somehow lost the reference (defensive). Using
-    // document.querySelector unconditionally was a bug: with two composers open
-    // (e.g. a reply pane + an edit-post form), the picker always aligned to the
-    // first sticker button in the document, not the one the user clicked.
     const btn = triggerBtn && document.body.contains(triggerBtn) ? triggerBtn : document.querySelector('.Button-Sticker');
     if (!btn || !mountNode) return;
 
@@ -186,7 +177,7 @@ app.initializers.add('ramon-stickers', () => {
     const pickerW = mountNode.offsetWidth || 320;
 
     if (window.innerWidth <= 640) {
-      // Mobile: centered overlay
+      // Celular: sobreposição centralizada.
       Object.assign(mountNode.style, {
         position: 'fixed',
         top: '50%',
@@ -199,8 +190,7 @@ app.initializers.add('ramon-stickers', () => {
       return;
     }
 
-    // Always above the button: anchor the picker's bottom edge just above the button top.
-    // Using `bottom` makes it independent of picker height — no measuring needed.
+    // Sempre acima do botão.
     const bottom = window.innerHeight - rect.top + gap;
     let left = rect.left + rect.width / 2 - pickerW / 2;
 
@@ -209,7 +199,7 @@ app.initializers.add('ramon-stickers', () => {
     Object.assign(mountNode.style, {
       position: 'fixed',
       bottom: bottom + 'px',
-      top: '', // clear top so it doesn't conflict
+      top: '',
       left: left + 'px',
       transform: '',
       zIndex: '1050',

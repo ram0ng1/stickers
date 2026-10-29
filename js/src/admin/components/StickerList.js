@@ -10,10 +10,6 @@ import { renderTgs } from '../../common/utils/renderTgs';
 import { isLottiePath, isTgsPath, sanitizeCategoryCode } from '../../common/utils/stickerPath';
 import { STICKER_ICON_PATH } from '../../common/utils/stickerIcon';
 
-// Animated-sticker renderer: lottie-web (canvas renderer)
-// import path: lottie-web/build/player/lottie_canvas
-const ANIM_LIB = 'lottie-web';
-
 function stickerSvgIcon(size = '1.5em') {
   return (
     <svg fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ width: size, height: size }}>
@@ -23,8 +19,7 @@ function stickerSvgIcon(size = '1.5em') {
 }
 
 /**
- * Group an array of stickers by category.
- * Returns an ordered array of { key, label, stickers }.
+ * Agrupa por categoria: [{ key, label, stickers }].
  */
 function groupByCategory(stickers) {
   const map = new Map();
@@ -43,8 +38,7 @@ function groupByCategory(stickers) {
 }
 
 /**
- * Sort groups according to a saved order array of category keys.
- * Groups not present in the order array are appended at the end.
+ * Ordena os grupos pela ordem salva; os que não estão nela vão para o fim.
  */
 function sortGroupsByOrder(groups, order) {
   if (!order || order.length === 0) return groups;
@@ -68,7 +62,6 @@ export default class StickerList extends Component {
     this.renameLoading = false;
     this.renameError = null;
 
-    // Saved category order (array of category keys)
     try {
       const raw = app.data.settings['ramon-stickers.category-order'];
       this.categoryOrder = raw ? JSON.parse(raw) : [];
@@ -79,11 +72,8 @@ export default class StickerList extends Component {
     app.stickerListState.loadResults();
   }
 
-  // ── Category ordering ─────────────────────────────────────────────────────
-
   /**
-   * Move a category up (-1) or down (+1) within the current sorted list.
-   * Persists immediately via the API.
+   * Move a categoria para cima (-1) ou para baixo (+1) e salva na hora.
    */
   moveCategory(key, direction, sortedGroups) {
     const keys = sortedGroups.map((g) => g.key);
@@ -92,25 +82,31 @@ export default class StickerList extends Component {
 
     if (idx === -1 || newIdx < 0 || newIdx >= keys.length) return;
 
-    // Capture the current order so we can roll back if the server rejects it.
     const previousOrder = this.categoryOrder;
 
-    // Optimistic swap
     [keys[idx], keys[newIdx]] = [keys[newIdx], keys[idx]];
 
-    this.categoryOrder = keys;
+    // Categorias salvas que ainda não carregaram (estão em páginas seguintes da
+    // lista) continuam na ordem, depois das visíveis.
+    const order = [...keys, ...previousOrder.filter((key) => !keys.includes(key))];
+
+    this.categoryOrder = order;
     m.redraw();
 
     app
       .request({
         method: 'POST',
         url: app.forum.attribute('apiUrl') + '/stickers/category-order',
-        body: { order: keys },
+        body: { order },
+        errorHandler: (error) => {
+          throw error;
+        },
+      })
+      .then(() => {
+        // O oninit lê daqui ao voltar para a página.
+        app.data.settings['ramon-stickers.category-order'] = JSON.stringify(order);
       })
       .catch((err) => {
-        // Roll back the optimistic reorder and tell the user. Silently
-        // swallowing the error left the UI showing an order the server never
-        // persisted — it would silently revert on the next page load.
         console.error('[Stickers] Category reorder failed:', err);
         this.categoryOrder = previousOrder;
         m.redraw();
@@ -137,7 +133,7 @@ export default class StickerList extends Component {
     const newName = this.renameName.trim() || newCode;
 
     if (!newCode) {
-      this.renameError = 'Category code cannot be empty.';
+      this.renameError = app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.rename_empty_error', {}, true);
       m.redraw();
       return;
     }
@@ -155,14 +151,20 @@ export default class StickerList extends Component {
       .then(() => {
         this.renamingCategory = null;
         this.renameLoading = false;
-        // If the renamed category was the active filter, follow the new key
         if (this.activeCategory === oldKey) this.activeCategory = newCode;
-        app.stickerListState.stickers = [];
+
+        // O servidor troca o código na ordem salva; aqui também.
+        if (oldKey !== newCode && this.categoryOrder.includes(oldKey)) {
+          this.categoryOrder = [...new Set(this.categoryOrder.map((key) => (key === oldKey ? newCode : key)))];
+          app.data.settings['ramon-stickers.category-order'] = JSON.stringify(this.categoryOrder);
+        }
+
         app.stickerListState.loadResults();
       })
       .catch((err) => {
         this.renameLoading = false;
-        this.renameError = err?.response?.errors?.[0]?.detail || 'Rename failed.';
+        this.renameError =
+          err?.response?.errors?.[0]?.detail || app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.rename_error', {}, true);
         m.redraw();
       });
   }
@@ -178,14 +180,11 @@ export default class StickerList extends Component {
   }
 
   /**
-   * Initialize lottie/tgs previews in the list.
-   * Uses lottie-web (canvas renderer) — see ANIM_LIB constant above.
-   * Hover-to-play: animation shows first frame at rest, plays on mouse over.
+   * Prévias Lottie/TGS da lista: paradas no 1º quadro, tocam no hover.
    */
   initAnimatedPreviews() {
     if (!this.element) return;
 
-    // Lottie JSON previews — rendered via lottie-web canvas renderer
     this.element.querySelectorAll('div[data-lottie-url]:not([data-lottie-loaded])').forEach((el) => {
       el.setAttribute('data-lottie-loaded', '1');
       const url = el.getAttribute('data-lottie-url');
@@ -193,7 +192,6 @@ export default class StickerList extends Component {
       if (url) renderLottie(el, url, { hoverPlay: true, hoverTarget });
     });
 
-    // TGS previews — decompressed gzip + rendered via lottie-web canvas renderer
     this.element.querySelectorAll('div[data-tgs-url]:not([data-tgs-loaded])').forEach((el) => {
       el.setAttribute('data-tgs-loaded', '1');
       const url = el.getAttribute('data-tgs-url');
@@ -208,7 +206,7 @@ export default class StickerList extends Component {
   }
 
   /**
-   * Render a single sticker card (shared between category groups).
+   * Card de um sticker.
    */
   stickerCard(sticker) {
     const state = app.stickerListState;
@@ -222,18 +220,17 @@ export default class StickerList extends Component {
     return (
       <li key={sticker.id()}>
         <div className={'customSticker' + (selected ? ' is-selected' : '')} onclick={selecting ? () => state.toggleSelect(sticker.id()) : null}>
-          {/* Selection indicator (only in selection mode) */}
           {selecting && (
             <div className={'customSticker-selectMark' + (selected ? ' is-selected' : '')}>
               <i className={'fas fa-' + (selected ? 'check-circle' : 'circle')} />
             </div>
           )}
 
-          {/* Edit button (hidden in selection mode) */}
           {!selecting && (
             <Button
               className="Button Button--icon customSticker-editButton"
               icon="fas fa-pencil-alt"
+              aria-label={app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.edit_button')}
               onclick={() => app.modal.show(EditStickerModal, { model: sticker })}
             />
           )}
@@ -261,22 +258,20 @@ export default class StickerList extends Component {
     const selecting = state.selectionMode;
     const allGroups = sortGroupsByOrder(groupByCategory(state.stickers), this.categoryOrder);
 
-    // Filter groups by active category tab (null = show all)
+    // activeCategory null = todas.
     const visibleGroups = this.activeCategory === null ? allGroups : allGroups.filter((g) => g.key === this.activeCategory);
 
     return (
       <div className={'sticker-list' + (selecting ? ' StickerList--selecting' : '')}>
         {state.isLoading() && state.stickers.length === 0 ? <LoadingIndicator display="unset" size="large" /> : ''}
 
-        {/* Add sticker button — always at the top, above all categories */}
         {!selecting && (
           <button className="StickerAddButton" onclick={() => app.modal.show(EditStickerModal)}>
             <span className="StickerAddButton-icon">{stickerSvgIcon('1.1em')}</span>
-            <span className="StickerAddButton-label">Add sticker</span>
+            <span className="StickerAddButton-label">{app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.add_button')}</span>
           </button>
         )}
 
-        {/* Category filter tabs — only when more than one category exists */}
         {allGroups.length > 1 && (
           <div className="StickerCategoryFilter">
             <button
@@ -286,7 +281,7 @@ export default class StickerList extends Component {
                 m.redraw();
               }}
             >
-              All
+              {app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.all_tab')}
               <span className="StickerCategoryFilter-count">{state.stickers.length}</span>
             </button>
 
@@ -306,16 +301,14 @@ export default class StickerList extends Component {
           </div>
         )}
 
-        {/* Category groups (filtered) */}
         {visibleGroups.map((group) => (
           <div key={group.key} className="StickerCategory">
             {this.renamingCategory === group.key ? (
-              /* ── Inline rename form ── */
               <div className="StickerCategory-renameForm">
                 <div className="StickerCategory-renameFields">
                   <input
                     className="FormControl FormControl--small"
-                    placeholder="category_code"
+                    placeholder={app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.rename_code_placeholder', {}, true)}
                     value={this.renameCode}
                     oninput={(e) => {
                       this.renameCode = e.target.value;
@@ -323,7 +316,7 @@ export default class StickerList extends Component {
                   />
                   <input
                     className="FormControl FormControl--small"
-                    placeholder="Display name"
+                    placeholder={app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.rename_name_placeholder', {}, true)}
                     value={this.renameName}
                     oninput={(e) => {
                       this.renameName = e.target.value;
@@ -344,15 +337,14 @@ export default class StickerList extends Component {
                     disabled={this.renameLoading}
                     onclick={() => this.saveRename(group.key)}
                   >
-                    Save
+                    {app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.rename_save_button')}
                   </Button>
                   <Button className="Button Button--sm" disabled={this.renameLoading} onclick={() => this.cancelRename()}>
-                    Cancel
+                    {app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.rename_cancel_button')}
                   </Button>
                 </div>
               </div>
             ) : (
-              /* ── Normal header ── */
               <div className="StickerCategory-header">
                 <h3>{group.label}</h3>
                 <span className="StickerCategory-header-count">{group.stickers.length}</span>
@@ -361,7 +353,7 @@ export default class StickerList extends Component {
                   <span className="StickerCategory-orderBtns">
                     <button
                       className="StickerCategory-orderBtn"
-                      title="Move up"
+                      title={app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.move_up', {}, true)}
                       disabled={visibleGroups.indexOf(group) === 0}
                       onclick={() => this.moveCategory(group.key, -1, visibleGroups)}
                     >
@@ -369,7 +361,7 @@ export default class StickerList extends Component {
                     </button>
                     <button
                       className="StickerCategory-orderBtn"
-                      title="Move down"
+                      title={app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.move_down', {}, true)}
                       disabled={visibleGroups.indexOf(group) === visibleGroups.length - 1}
                       onclick={() => this.moveCategory(group.key, 1, visibleGroups)}
                     >
@@ -378,8 +370,13 @@ export default class StickerList extends Component {
                   </span>
                 )}
 
-                {!selecting && (
-                  <button className="StickerCategory-renameBtn" title="Rename category" onclick={() => this.startRename(group)}>
+                {/* O grupo sem categoria (código vazio) não tem o que renomear: o servidor recusa. */}
+                {!selecting && group.key !== '' && (
+                  <button
+                    className="StickerCategory-renameBtn"
+                    title={app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.rename_button', {}, true)}
+                    onclick={() => this.startRename(group)}
+                  >
                     <i className="fas fa-pencil-alt" />
                   </button>
                 )}
@@ -398,14 +395,16 @@ export default class StickerList extends Component {
           </div>
         )}
 
-        {/* Library attribution — shown at the bottom of the list */}
         {state.stickers.some((s) => {
           const p = s.path() || '';
           return p.endsWith('.json') || p.endsWith('.tgs');
         }) && (
           <p className="StickerList-animLib">
-            <i className="fas fa-info-circle" /> Animated previews rendered via <strong>{ANIM_LIB}</strong>{' '}
-            <span className="StickerList-animLib-detail">(canvas renderer)</span>
+            <i className="fas fa-info-circle" />{' '}
+            {app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.anim_lib', {
+              strong: <strong />,
+              detail: <span className="StickerList-animLib-detail" />,
+            })}
           </p>
         )}
       </div>

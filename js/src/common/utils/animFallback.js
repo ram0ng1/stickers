@@ -1,31 +1,24 @@
 /**
- * Render a visible fallback marker into an animated-sticker container when the
- * animation cannot be loaded.
+ * Mostra um marcador no lugar de uma animação que não carregou.
  *
- * lottie-web renders into a container element; when fetching/decoding fails
- * (most commonly because the file is on a different origin — animated stickers
- * MUST be same-origin, see renderLottie.js / renderTgs.js) the container was
- * previously left completely empty, so the failure was invisible: the picker
- * just showed a blank cell. This injects a small warning glyph plus a
- * `title` tooltip naming the URL and reason, so the breakage is at least
- * noticeable and diagnosable.
+ * Um container vazio esconderia a falha. O `title` leva a URL e o motivo,
+ * para dar para diagnosticar.
  *
- * @param {HTMLElement} container - the animation container element
- * @param {string}      url       - the URL that failed to load
- * @param {string}      [reason]  - short human-readable failure reason
+ * @param {HTMLElement} container
+ * @param {string}      url
+ * @param {string}      [reason]
  */
 export function renderAnimFallback(container, url, reason) {
   if (!container) return;
 
-  // Drop any partial canvas a failed render may have left behind.
   container.querySelectorAll('canvas').forEach((c) => c.remove());
 
   let fallback = container.querySelector('.StickerAnim-fallback');
   if (!fallback) {
     fallback = document.createElement('span');
     fallback.className = 'StickerAnim-fallback';
-    fallback.textContent = '⚠'; // ⚠
-    // Inline styles keep this self-contained (no LESS dependency).
+    fallback.textContent = '⚠';
+    // Estilo inline para não depender do LESS.
     fallback.style.cssText =
       'display:flex;align-items:center;justify-content:center;' +
       'width:100%;height:100%;min-width:32px;min-height:32px;' +

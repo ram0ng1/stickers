@@ -7,12 +7,12 @@ import Stream from 'flarum/common/utils/Stream';
 import urlChecker from '../../common/utils/urlChecker';
 import { renderLottie } from '../../common/utils/renderLottie';
 import { renderTgs } from '../../common/utils/renderTgs';
-import { emojiToSlug, emojiToTitle } from '../../common/utils/emojiFilename';
+import { emojiToCode, emojiToTitle } from '../../common/utils/emojiFilename';
 import { isLottiePath, isTgsPath, isAnimatedPath, sanitizeCategoryCode } from '../../common/utils/stickerPath';
+import uploadStickerFile from '../utils/uploadStickerFile';
 
 /**
- * Modal for adding or editing a sticker.
- * Supports images (PNG, GIF, WebP, JPEG), Lottie JSON and TGS files.
+ * Modal de criar/editar sticker: imagens (PNG, GIF, WebP, JPEG), Lottie JSON e TGS.
  */
 export default class EditStickerModal extends Modal {
   oninit(vnode) {
@@ -26,8 +26,7 @@ export default class EditStickerModal extends Modal {
     this.path = Stream(this.sticker.path() || '');
     this.uploading = false;
     this.uploadError = null;
-    // URL that was last rendered into the preview div (to avoid re-rendering same file)
-    this._previewUrl = null;
+    this.deleting = false;
   }
 
   className() {
@@ -95,7 +94,6 @@ export default class EditStickerModal extends Modal {
       10
     );
 
-    // File upload (supports Lottie JSON, TGS, PNG, GIF, WebP, JPEG)
     items.add(
       'upload',
       <div className="Form-group">
@@ -108,14 +106,12 @@ export default class EditStickerModal extends Modal {
           {this.path() && (
             <span className="StickerUpload-preview">
               {isLottiePath(this.path()) ? (
-                // Lottie JSON preview: div container — lottie-web creates canvas inside
                 <div
                   className="StickerUpload-animPreview"
                   oncreate={(vnode) => this.initAnimPreview(vnode.dom)}
                   onupdate={(vnode) => this.initAnimPreview(vnode.dom)}
                 />
               ) : isTgsPath(this.path()) ? (
-                // TGS preview: same pattern
                 <div
                   className="StickerUpload-animPreview"
                   oncreate={(vnode) => this.initAnimPreview(vnode.dom)}
@@ -124,7 +120,7 @@ export default class EditStickerModal extends Modal {
               ) : (
                 <img
                   src={urlChecker(this.path()) ? this.path() : app.forum.attribute('baseUrl') + this.path()}
-                  alt="preview"
+                  alt={app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.preview_alt', {}, true)}
                   className="StickerUpload-img"
                 />
               )}
@@ -135,7 +131,6 @@ export default class EditStickerModal extends Modal {
         </div>
         <p className="helpText">{app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.upload_help')}</p>
 
-        {/* TGS license warning — shown whenever a .tgs file is loaded */}
         {isTgsPath(this.path()) && (
           <div className="StickerTgsNotice">
             <i className="fas fa-exclamation-triangle StickerTgsNotice-icon" />
@@ -146,10 +141,7 @@ export default class EditStickerModal extends Modal {
           </div>
         )}
 
-        {/* External-URL warning — animated stickers must be same-origin to render
-            (see renderLottie.js / renderTgs.js). An admin pasting an external
-            https:// URL for a .json/.tgs would otherwise save a sticker that
-            silently never animates for visitors. */}
+        {/* Animação em URL externa não toca (o renderer só aceita a mesma origem). */}
         {urlChecker(this.path()) && isAnimatedPath(this.path()) && (
           <div className="StickerTgsNotice">
             <i className="fas fa-exclamation-triangle StickerTgsNotice-icon" />
@@ -175,9 +167,15 @@ export default class EditStickerModal extends Modal {
           app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.submit_button')
         )}
         {this.sticker.exists ? (
-          <button type="button" className="Button EditStickerModal-delete" onclick={this.delete.bind(this)}>
+          <Button
+            type="button"
+            className="Button EditStickerModal-delete"
+            loading={this.deleting}
+            disabled={this.deleting || this.loading}
+            onclick={this.delete.bind(this)}
+          >
             {app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.delete_sticker_button')}
-          </button>
+          </Button>
         ) : (
           ''
         )}
@@ -189,8 +187,7 @@ export default class EditStickerModal extends Modal {
   }
 
   /**
-   * Initialize (or re-initialize) the animated preview inside the modal.
-   * The preview autoplays — the user wants to see the full animation here.
+   * Prévia animada do modal; aqui toca sozinha, para ver a animação inteira.
    */
   initAnimPreview(container) {
     const path = this.path();
@@ -198,7 +195,6 @@ export default class EditStickerModal extends Modal {
 
     const url = urlChecker(path) ? path : app.forum.attribute('baseUrl') + path;
 
-    // Skip if already rendered for this URL
     if (container.getAttribute('data-preview-url') === url) return;
     container.setAttribute('data-preview-url', url);
 
@@ -220,44 +216,25 @@ export default class EditStickerModal extends Modal {
 
       this.uploading = true;
       this.uploadError = null;
-      this._previewUrl = null; // force re-render on next update
       m.redraw();
 
-      const formData = new FormData();
-      formData.append('file', file);
+      uploadStickerFile(file)
+        .then((path) => {
+          this.path(path);
 
-      // I-4: raw fetch() (not app.request) because app.request doesn't expose FormData
-      // semantics for multipart uploads. CSRF token is added manually to compensate
-      // for skipping app.request's auto-injection. See CLAUDE.md §16.
-      fetch(app.forum.attribute('apiUrl') + '/stickers/upload', {
-        method: 'POST',
-        headers: {
-          'X-CSRF-Token': app.session.csrfToken,
-        },
-        body: formData,
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.path) {
-            this.path(data.path);
-
-            // Auto-fill title from filename (emoji converted to English names)
-            if (!this.stickerTitle()) {
-              this.stickerTitle(emojiToTitle(file.name));
-            }
-
-            // Auto-fill textToReplace (emoji converted to slug-safe English names)
-            if (!this.textToReplace()) {
-              this.textToReplace(':' + emojiToSlug(file.name.replace(/\.[^.]+$/, '')) + ':');
-            }
-          } else {
-            this.uploadError = data.error || 'Upload failed';
+          // Título e código saem do nome do arquivo (emojis viram o nome em inglês).
+          if (!this.stickerTitle()) {
+            this.stickerTitle(emojiToTitle(file.name));
           }
-          this.uploading = false;
-          m.redraw();
+
+          if (!this.textToReplace()) {
+            this.textToReplace(emojiToCode(file.name));
+          }
         })
         .catch((err) => {
-          this.uploadError = 'Upload failed: ' + err.message;
+          this.uploadError = app.translator.trans('ramon-stickers.admin.upload.failed_with_error', { error: err.message }, true);
+        })
+        .finally(() => {
           this.uploading = false;
           m.redraw();
         });
@@ -284,57 +261,68 @@ export default class EditStickerModal extends Modal {
     const exists = this.sticker.exists;
 
     this.sticker
-      .save(this.submitData())
+      // O erro sai no alerta do próprio modal; o errorHandler evita um segundo alerta.
+      .save(this.submitData(), {
+        errorHandler: (error) => {
+          throw error;
+        },
+      })
       .then((sticker) => {
         this.hide();
         if (!exists) app.stickerListState.addToList(sticker);
         this.loading = false;
         this.showSuccessMessage();
-        this.clearCache().catch(() => {});
       })
       .catch((err) => {
         this.loading = false;
         m.redraw();
         console.error('[Stickers] Save failed:', err);
-        // Surface the failure to the user. Modal stays open so they can adjust the
-        // input and retry — silently logging to the console (the prior behavior)
-        // looked like a hung Save button and led to duplicate clicks.
+        // O modal fica aberto para corrigir e tentar de novo.
         this.showErrorMessage(this.extractErrorMessage(err));
       });
   }
 
   delete() {
-    if (confirm(app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.delete_sticker_confirmation'))) {
-      this.sticker
-        .delete()
-        .then(() => {
-          this.hide();
-          app.stickerListState.removeFromList(this.sticker.id());
-          this.showSuccessMessage();
-          this.clearCache().catch(() => {});
-        })
-        .catch((err) => {
-          console.error('[Stickers] Delete failed:', err);
-          this.showErrorMessage(this.extractErrorMessage(err));
-        });
-    }
+    if (!confirm(app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.delete_sticker_confirmation', {}, true))) return;
+
+    const id = this.sticker.id();
+    this.deleting = true;
+    m.redraw();
+
+    this.sticker
+      .delete(
+        {},
+        {
+          errorHandler: (error) => {
+            throw error;
+          },
+        }
+      )
+      .then(() => {
+        this.hide();
+        app.stickerListState.removeFromList(id);
+        app.alerts.show(Alert, { type: 'success' }, app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.deleted_message'));
+      })
+      .catch((err) => {
+        console.error('[Stickers] Delete failed:', err);
+        this.showErrorMessage(this.extractErrorMessage(err));
+      })
+      .finally(() => {
+        this.deleting = false;
+        m.redraw();
+      });
   }
 
   showSuccessMessage() {
     return app.alerts.show(Alert, { type: 'success' }, app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.saved_message'));
   }
 
-  /**
-   * Show a user-visible error alert. Used by the save/delete catch blocks
-   * so failures don't disappear into the JS console.
-   */
   showErrorMessage(message) {
     return app.alerts.show(Alert, { type: 'error' }, message);
   }
 
   /**
-   * Pull the most useful error string out of whatever app.request gave us.
-   * Flarum tends to return JSON:API error documents with `errors[0].detail`.
+   * A mensagem mais útil do erro (o Flarum manda JSON:API com `errors[0].detail`).
    */
   extractErrorMessage(err) {
     const fallback = app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.save_error') || 'Save failed.';
@@ -348,12 +336,5 @@ export default class EditStickerModal extends Modal {
 
     if (typeof err.message === 'string' && err.message) return err.message;
     return fallback;
-  }
-
-  clearCache() {
-    return app.request({
-      method: 'DELETE',
-      url: app.forum.attribute('apiUrl') + '/cache',
-    });
   }
 }

@@ -5,22 +5,17 @@ import { renderLottie } from '../../common/utils/renderLottie';
 import { renderTgs } from '../../common/utils/renderTgs';
 import { isLottiePath, isTgsPath } from '../../common/utils/stickerPath';
 
-// ── Module-level catalog cache ──────────────────────────────────────────────
-// The picker is destroyed and re-created (m.mount) every time it opens, so
-// without a cache every open re-paginated the whole /stickers endpoint — 5-10
-// sequential requests on a large forum, on every single open. Stickers are
-// GLOBAL forum content (not actor-specific), so caching them at module scope
-// is safe — CLAUDE.md §27's module-state warning is specifically about
-// per-actor data. A short TTL lets sticker edits made elsewhere propagate into
-// a long-lived single-page session without a full reload.
+// O picker é desmontado e recriado a cada abertura; o cache evita paginar o
+// /stickers inteiro de novo a cada vez. Stickers são do fórum (não do ator),
+// então o cache no módulo é seguro. O TTL curto traz edições feitas em outra
+// aba sem recarregar a página.
 const CATALOG_TTL_MS = 5 * 60 * 1000;
 let catalogCache = null; // { stickers, byCategory, categories }
 let catalogCachedAt = 0;
-let catalogInFlight = null; // dedupes concurrent opens before the first fetch resolves
+let catalogInFlight = null; // aberturas simultâneas dividem a mesma requisição
 
 /**
- * Shape the raw JSON:API rows into the structure the view consumes, grouped
- * and ordered by category.
+ * Agrupa as linhas do JSON:API por categoria, na ordem salva no admin.
  */
 function buildCatalog(collected) {
   const baseUrl = app.forum.attribute('baseUrl');
@@ -39,13 +34,14 @@ function buildCatalog(collected) {
     };
   });
 
+  // Sem protótipo: uma categoria chamada "constructor" ou "__proto__" não
+  // pode cair num método de Object.
   let byCategory = stickers.reduce((acc, s) => {
     const cat = s.category || 'default';
     (acc[cat] = acc[cat] || []).push(s);
     return acc;
-  }, {});
+  }, Object.create(null));
 
-  // Respect the admin-saved category order.
   const savedOrder = (() => {
     try {
       return JSON.parse(app.forum.attribute('ramonStickersCategoryOrder') || '[]');
@@ -64,8 +60,7 @@ function buildCatalog(collected) {
       if (ib === -1) return -1;
       return ia - ib;
     });
-    // Rebuild byCategory in sorted order.
-    const sorted = {};
+    const sorted = Object.create(null);
     categories.forEach((k) => {
       sorted[k] = byCategory[k];
     });
@@ -76,13 +71,12 @@ function buildCatalog(collected) {
 }
 
 /**
- * Paginate through every page of the /stickers endpoint and build the catalog.
- * Hard-coded `page[limit]` caps silently hide stickers beyond the cap, so we
- * follow `links.next` instead. MAX_PAGES is a runaway-server safety stop.
+ * Percorre todas as páginas do /stickers seguindo `links.next` (um limite fixo
+ * esconderia o que passasse dele). MAX_PAGES só segura um servidor em loop.
  */
 function fetchCatalog() {
   const PAGE_SIZE = 200;
-  const MAX_PAGES = 100; // 100 × 200 = 20,000 stickers — far beyond any realistic library.
+  const MAX_PAGES = 100;
   const apiUrl = app.forum.attribute('apiUrl');
   const collected = [];
 
@@ -109,8 +103,7 @@ function fetchCatalog() {
 }
 
 /**
- * Return the sticker catalog, served from the module cache when fresh.
- * Concurrent callers share a single in-flight request.
+ * Catálogo do cache do módulo enquanto estiver fresco.
  */
 function loadCatalog() {
   if (catalogCache && Date.now() - catalogCachedAt < CATALOG_TTL_MS) {
@@ -126,7 +119,7 @@ function loadCatalog() {
       return catalog;
     })
     .catch((err) => {
-      catalogInFlight = null; // allow a retry on the next open
+      catalogInFlight = null; // a próxima abertura tenta de novo
       throw err;
     });
 
@@ -134,10 +127,11 @@ function loadCatalog() {
 }
 
 /**
- * The StickerPicker component renders the floating sticker panel.
+ * Painel flutuante de stickers.
  *
- * @attr {function} onInsert   called with text_to_replace string
- * @attr {function} onClose    called when picker should close
+ * @attr {function}    onInsert    recebe o text_to_replace escolhido
+ * @attr {function}    onClose     pede para fechar
+ * @attr {HTMLElement} [triggerBtn] botão que abriu o picker
  */
 export default class StickerPicker extends Component {
   oninit(vnode) {
@@ -152,23 +146,28 @@ export default class StickerPicker extends Component {
     super.oncreate(vnode);
     this.loadStickers();
 
-    // Close when clicking outside
+    // Clique fora fecha. O botão que abriu fica de fora: o próprio clique nele
+    // já alterna o picker, e fechar aqui no mousedown o reabria no click.
     this._outsideClickHandler = (e) => {
-      if (!this.element.contains(e.target)) {
+      const trigger = this.attrs.triggerBtn;
+      if (!this.element.contains(e.target) && !(trigger && trigger.contains(e.target))) {
         this.attrs.onClose();
       }
     };
+    this._keydownHandler = (e) => {
+      if (e.key === 'Escape') this.attrs.onClose();
+    };
     setTimeout(() => document.addEventListener('mousedown', this._outsideClickHandler), 10);
+    document.addEventListener('keydown', this._keydownHandler);
   }
 
   onremove(vnode) {
     super.onremove(vnode);
     document.removeEventListener('mousedown', this._outsideClickHandler);
+    document.removeEventListener('keydown', this._keydownHandler);
   }
 
   loadStickers() {
-    // Served from the module-level cache when fresh — see loadCatalog() above.
-    // The picker no longer hits the API on every open.
     loadCatalog()
       .then((catalog) => {
         this.stickers = catalog.stickers;
@@ -186,14 +185,11 @@ export default class StickerPicker extends Component {
   }
 
   /**
-   * Initialize animated stickers.
-   * The picker ALWAYS uses hover-to-play (better UX for browsing stickers).
-   * hoverTarget = the outer .StickerItem span so hovering anywhere on it triggers play.
+   * No picker as animações sempre tocam só no hover, em qualquer ponto do item.
    */
   initAnimatedStickers() {
     if (!this.element) return;
 
-    // Lottie JSON
     this.element.querySelectorAll('div[data-lottie-url]:not([data-lottie-loaded])').forEach((el) => {
       el.setAttribute('data-lottie-loaded', '1');
       const url = el.getAttribute('data-lottie-url');
@@ -201,7 +197,6 @@ export default class StickerPicker extends Component {
       if (url) renderLottie(el, url, { hoverPlay: true, hoverTarget });
     });
 
-    // TGS
     this.element.querySelectorAll('div[data-tgs-url]:not([data-tgs-loaded])').forEach((el) => {
       el.setAttribute('data-tgs-loaded', '1');
       const url = el.getAttribute('data-tgs-url');
@@ -210,16 +205,9 @@ export default class StickerPicker extends Component {
     });
   }
 
-  /**
-   * Returns true when the hover-play forum setting is enabled.
-   * Used to show a small visual hint in the picker tab.
-   */
-  get hoverPlayEnabled() {
-    return !!app.forum.attribute('ramonStickersHoverPlay');
-  }
-
   view() {
     const categories = Object.keys(this.byCategory);
+    const showTooltip = app.forum.attribute('ramonStickersShowTooltip') !== false;
 
     return m('div.StickerPicker', [
       this.loading
@@ -227,7 +215,6 @@ export default class StickerPicker extends Component {
         : categories.length === 0
           ? m('div.StickerPicker-empty', app.translator.trans('ramon-stickers.forum.picker.no_stickers'))
           : [
-              // Tab bar
               m(
                 'div.StickerPicker-tabs',
                 categories.map((cat) =>
@@ -246,29 +233,35 @@ export default class StickerPicker extends Component {
                 )
               ),
 
-              // Sticker grid
               m(
                 'div.StickerPicker-grid',
                 (this.byCategory[this.activeCategory] || []).map((sticker) =>
                   m(
                     'span.StickerItem' + (sticker.isLottie || sticker.isTgs ? '.StickerItem--animated' : ''),
                     {
-                      // key ensures Mithril creates fresh DOM elements on tab switch,
-                      // preventing data-lottie-loaded / canvas leakage between stickers
+                      // A key recria o DOM na troca de aba: sem ela, o data-lottie-loaded
+                      // e o canvas passavam de um sticker para outro.
                       key: sticker.id,
+                      role: 'button',
+                      tabindex: 0,
+                      title: showTooltip ? sticker.name : undefined,
+                      'aria-label': sticker.name || sticker.textToReplace,
                       onclick: (e) => {
                         e.preventDefault();
                         this.attrs.onInsert(sticker.textToReplace);
                       },
+                      onkeydown: (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          this.attrs.onInsert(sticker.textToReplace);
+                        }
+                      },
                     },
                     sticker.isLottie
-                      ? // Lottie JSON: container div — lottie-web creates <canvas> inside it
-                        m('div.StickerItem-player', { 'data-lottie-url': sticker.url })
+                      ? m('div.StickerItem-player', { 'data-lottie-url': sticker.url })
                       : sticker.isTgs
-                        ? // TGS: same pattern
-                          m('div.StickerItem-player', { 'data-tgs-url': sticker.url })
-                        : // Static image
-                          m('img', { src: sticker.url, alt: sticker.name })
+                        ? m('div.StickerItem-player', { 'data-tgs-url': sticker.url })
+                        : m('img', { src: sticker.url, alt: sticker.name })
                   )
                 )
               ),

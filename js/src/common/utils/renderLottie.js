@@ -1,19 +1,12 @@
-/**
- * Renders Lottie JSON animation files using lottie-web canvas renderer.
- *
- * IMPORTANT: lottie-web canvas renderer creates a <canvas> INSIDE the container.
- * The container must be a regular HTML element (div/span), NOT a <canvas>.
- */
-import lottie from 'lottie-web/build/player/lottie_canvas';
+import loadLottie from './loadLottie';
 import { renderAnimFallback } from './animFallback';
 
-// Cap on raw JSON size: a Lottie payload of hundreds of MB would freeze the
-// tab while parsing. Real Lottie files are well under 1 MB.
+// Limite do JSON bruto: um Lottie de centenas de MB trava a aba no parse.
+// Arquivos reais ficam bem abaixo de 1 MB.
 const MAX_LOTTIE_BYTES = 8 * 1024 * 1024;
 
 async function fetchLottieJson(url) {
-  // Same-origin only: refuse to fetch animations from arbitrary hosts.
-  // Also rejects javascript:/data:/file: schemes, whose .origin is "null".
+  // Só a mesma origem. Também barra javascript:/data:/file:, cuja origin é "null".
   let parsed;
   try {
     parsed = new URL(url, location.origin);
@@ -24,6 +17,8 @@ async function fetchLottieJson(url) {
 
   const response = await fetch(parsed.href);
   if (!response.ok) throw new Error('HTTP ' + response.status);
+  // fetch segue redirecionamentos: confere a origem de onde a resposta veio.
+  if (new URL(response.url).origin !== location.origin) throw new Error('Lottie URL must be same-origin');
 
   const reader = response.body.getReader();
   const chunks = [];
@@ -54,33 +49,32 @@ async function fetchLottieJson(url) {
 }
 
 /**
- * Render a Lottie JSON animation into a container element.
+ * Renderiza uma animação Lottie (JSON) dentro do container.
  *
- * @param {HTMLElement} container            - Container element (div/span). Must NOT be <canvas>.
- * @param {string}      lottieUrl            - URL of the .json Lottie file
+ * O renderer canvas do lottie-web cria o <canvas> dentro do container, então
+ * ele precisa ser um elemento comum (div/span), nunca um <canvas>.
+ *
+ * @param {HTMLElement} container
+ * @param {string}      lottieUrl
  * @param {object}      [options]
  * @param {boolean}     [options.loop=true]
  * @param {boolean}     [options.autoplay=true]
- * @param {boolean}     [options.hoverPlay=false]  - If true, animation is paused on first frame
- *                                                   and plays only while the mouse is over
- *                                                   `options.hoverTarget` (or `container`).
- * @param {HTMLElement} [options.hoverTarget]       - Element that triggers play/pause on hover.
- *                                                   Defaults to `container`.
- * @returns {Promise<object|null>} lottie animation instance
+ * @param {boolean}     [options.hoverPlay=false]  Parada no 1º quadro; toca só com o mouse em cima.
+ * @param {HTMLElement} [options.hoverTarget]      Elemento que dispara o hover (padrão: o container).
+ * @returns {Promise<object|null>}
  */
 export async function renderLottie(container, lottieUrl, options = {}) {
   try {
     const animData = await fetchLottieJson(lottieUrl);
 
-    // Remove ALL existing canvases — covers same-type and cross-type leftovers
-    // (e.g., a lottie canvas left behind when the container is reused for a TGS sticker)
+    // Tira qualquer canvas anterior, inclusive de outro formato (container reaproveitado).
     container.querySelectorAll('canvas').forEach((c) => c.remove());
 
+    const lottie = await loadLottie();
     const anim = lottie.loadAnimation({
       container,
       renderer: 'canvas',
       loop: options.loop !== false,
-      // When hoverPlay is on, start paused
       autoplay: options.hoverPlay ? false : options.autoplay !== false,
       animationData: animData,
       rendererSettings: {
@@ -89,12 +83,10 @@ export async function renderLottie(container, lottieUrl, options = {}) {
       },
     });
 
-    // Tag the canvas lottie creates so we can remove it on re-render
     anim.addEventListener('DOMLoaded', () => {
       const canvas = container.querySelector('canvas');
       if (canvas) canvas.setAttribute('data-lottie-canvas', '1');
 
-      // Show first frame statically when hoverPlay is active
       if (options.hoverPlay) {
         anim.goToAndStop(0, true);
       }
@@ -108,9 +100,8 @@ export async function renderLottie(container, lottieUrl, options = {}) {
 
     return anim;
   } catch (err) {
-    // The most common cause is an external (cross-origin) .json URL — animated
-    // stickers must be self-hosted. Leaving the container empty hid the
-    // failure; render a visible fallback marker so it's noticeable instead.
+    // Quase sempre é uma URL de outra origem: animações precisam estar no
+    // próprio fórum. O marcador deixa a falha visível em vez de uma célula vazia.
     console.warn('[Stickers] Could not render Lottie:', lottieUrl, err);
     renderAnimFallback(container, lottieUrl, err && err.message);
     return null;
@@ -118,11 +109,10 @@ export async function renderLottie(container, lottieUrl, options = {}) {
 }
 
 /**
- * Initialize all Lottie elements in a given root.
- * Elements must have class `Sticker--lottie` and attribute `data-lottie="url"`.
+ * Inicializa os `.Sticker--lottie[data-lottie]` ainda não iniciados dentro de `root`.
  *
  * @param {Element|null} root
- * @param {object}       [options]  Passed directly to renderLottie (e.g. { hoverPlay: true })
+ * @param {object}       [options]  Repassado ao renderLottie (ex.: { hoverPlay: true }).
  */
 export function initLottieInRoot(root, options = {}) {
   const els = (root || document).querySelectorAll('.Sticker--lottie:not([data-lottie-init])');

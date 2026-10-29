@@ -1,10 +1,5 @@
-// Shared sticker shape SVG — the classic "sticker with folded corner".
-// Path 1: sticker body (rounded rect with the top-right corner cut diagonally).
-// Path 2: the folded/peeled corner detail. Both filled with currentColor.
-//
-// Previously this 6-line path string was copied verbatim into both
-// forum/index.js (composer toolbar button) and admin/StickerList.js ("Add
-// sticker" button). Keeping it here means the two never drift apart.
+// Ícone de sticker (corpo com o canto dobrado), em currentColor. Usado no
+// botão do compositor e no botão "Adicionar sticker" do admin.
 export const STICKER_ICON_PATH =
   'M20,11.5 L20,7.5 C20,5.56700338 18.4329966,4 16.5,4 L7.5,4 C5.56700338,4 4,5.56700338 4,7.5 ' +
   'L4,16.5 C4,18.4329966 5.56700338,20 7.5,20 L12.5,20 C13.3284271,20 14,19.3284271 14,18.5 ' +

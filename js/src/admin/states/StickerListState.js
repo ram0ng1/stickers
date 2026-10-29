@@ -6,30 +6,43 @@ export default class StickerListState {
     this.moreResults = false;
     this.loading = false;
 
-    // Selection mode
+    // Posição no servidor, separada do tamanho da lista: adicionar ou apagar
+    // localmente muda `stickers.length`, e usá-lo como offset faria o
+    // "Carregar mais" pular ou repetir itens.
+    this.offset = 0;
+    this.requestId = 0;
+
     this.selectionMode = false;
     this.selectedIds = new Set();
   }
 
-  // ── Loading ──────────────────────────────────────────────────────────────
-
   loadResults(offset = 0) {
     if (offset === 0) {
-      // Reset on fresh load so re-entering the page never duplicates
+      // Recomeça do zero: voltar à página nunca duplica a lista.
       this.stickers = [];
       this.moreResults = false;
+      this.offset = 0;
     }
     this.loading = true;
-    return app.store.find('stickers', { page: { limit: 24, offset } }).then(this.parseResults.bind(this));
+
+    // Só a resposta da requisição mais recente vale: recarregar no meio de um
+    // "Carregar mais" duplicaria a página.
+    const requestId = ++this.requestId;
+
+    return app.store.find('stickers', { page: { limit: 24, offset } }).then((results) => {
+      if (requestId !== this.requestId) return results;
+      return this.parseResults(results);
+    });
   }
 
   loadMore() {
-    this.loading = true;
-    this.loadResults(this.stickers.length);
+    this.loadResults(this.offset);
   }
 
   parseResults(results) {
-    this.stickers.push(...results);
+    const known = new Set(this.stickers.map((s) => s.id()));
+    this.stickers.push(...results.filter((s) => !known.has(s.id())));
+    this.offset += results.length;
     this.loading = false;
     this.moreResults = !!results.payload.links && !!results.payload.links.next;
     m.redraw();
@@ -37,13 +50,18 @@ export default class StickerListState {
   }
 
   addToList(sticker) {
+    // O novo vai para o fim da ordem do servidor (id): o offset não muda, e o
+    // filtro de duplicados do parseResults cobre quando a paginação chegar nele.
     this.stickers.unshift(sticker);
     m.redraw();
   }
 
   removeFromList(stickerId) {
     const index = this.stickers.findIndex((s) => stickerId === s.id());
-    if (index !== -1) this.stickers.splice(index, 1);
+    if (index !== -1) {
+      this.stickers.splice(index, 1);
+      this.offset = Math.max(0, this.offset - 1);
+    }
     m.redraw();
   }
 
@@ -56,8 +74,6 @@ export default class StickerListState {
   empty() {
     return this.stickers.length === 0 && !this.loading;
   }
-
-  // ── Selection ─────────────────────────────────────────────────────────────
 
   enterSelectionMode() {
     this.selectionMode = true;

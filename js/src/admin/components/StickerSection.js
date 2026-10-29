@@ -1,53 +1,47 @@
 import app from 'flarum/admin/app';
 import { saveAs } from 'file-saver';
-import { emojiToSlug, emojiToTitle } from '../../common/utils/emojiFilename';
+import { emojiToCode, emojiToTitle } from '../../common/utils/emojiFilename';
 import Alert from 'flarum/common/components/Alert';
 import Button from 'flarum/common/components/Button';
 import Switch from 'flarum/common/components/Switch';
-import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
 import Component from 'flarum/common/Component';
 import ItemList from 'flarum/common/utils/ItemList';
 import listItems from 'flarum/common/helpers/listItems';
+import saveSettings from 'flarum/admin/utils/saveSettings';
 import StickerList from './StickerList';
-import EditStickerModal from './EditStickerModal';
 import { sanitizeCategoryCode } from '../../common/utils/stickerPath';
+import uploadStickerFile from '../utils/uploadStickerFile';
+
+// Espera entre tentativas quando o limite de envios (UploadThrottler) responde 429.
+const THROTTLE_RETRY_MS = 5000;
+const THROTTLE_MAX_RETRIES = 15;
 
 export default class StickerSection extends Component {
   oninit(vnode) {
     super.oninit(vnode);
-    this.hoverPlayEnabled = app.data.settings['ramon-stickers.hover-play'] === '1';
-    this.showTooltipEnabled = app.data.settings['ramon-stickers.show-tooltip'] !== '0';
+    this.hoverPlayEnabled = ['1', true].includes(app.data.settings['ramon-stickers.hover-play']);
+    this.showTooltipEnabled = !['0', false].includes(app.data.settings['ramon-stickers.show-tooltip']);
     this.savingHoverPlay = false;
     this.savingShowTooltip = false;
 
-    // Export
     this.exporting = false;
 
-    // Import progress/result
-    // { active: bool, imported: N, skipped: N, total: N, error: str|null }
+    // { active, imported, skipped, total, error }
     this.importState = null;
 
-    // Bulk upload progress/result
-    // { active: bool, current: N, total: N, errors: N }
+    // { active, current, total, errors }
     this.uploadState = null;
 
-    // Bulk delete
     this.deletingSelected = false;
   }
-
-  // ---------------------------------------------------------------------------
-  // Export
-  // ---------------------------------------------------------------------------
 
   exportStickerList() {
     if (this.exporting) return;
     this.exporting = true;
     m.redraw();
 
-    // The export endpoint streams the ZIP directly as the response body
-    // (never base64-encoded in JSON — that was the memory blow-up the prior
-    // implementation hit on large libraries). Use raw fetch() so we can
-    // receive a Blob without app.request() forcing JSON parsing.
+    // fetch() puro: o ZIP vem como stream binário e o app.request() tentaria
+    // ler JSON.
     fetch(app.forum.attribute('apiUrl') + '/stickers/export', {
       method: 'POST',
       credentials: 'same-origin',
@@ -56,8 +50,6 @@ export default class StickerSection extends Component {
       .then((response) => {
         if (!response.ok) throw new Error('HTTP ' + response.status);
 
-        // Pull the server-generated filename out of Content-Disposition.
-        // Fallback to a date-stamped name if the header is missing.
         const disposition = response.headers.get('Content-Disposition') || '';
         const match = disposition.match(/filename\s*=\s*"?([^"]+)"?/i);
         const filename = match ? match[1] : `stickers-${new Date().toISOString().slice(0, 10)}.zip`;
@@ -66,7 +58,7 @@ export default class StickerSection extends Component {
       })
       .catch((err) => {
         console.error('[Stickers] Export failed:', err);
-        alert(app.translator.trans('ramon-stickers.admin.sticker_section.export_error'));
+        alert(app.translator.trans('ramon-stickers.admin.sticker_section.export_error', {}, true));
       })
       .then(() => {
         this.exporting = false;
@@ -74,11 +66,9 @@ export default class StickerSection extends Component {
       });
   }
 
-  // ---------------------------------------------------------------------------
-  // Import — .zip or .json, with dedup + progress display
-  // ---------------------------------------------------------------------------
-
   importStickerList() {
+    if (this.importState?.active) return;
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.zip,.json';
@@ -98,7 +88,7 @@ export default class StickerSection extends Component {
   }
 
   importZip(file) {
-    if (!confirm(app.translator.trans('ramon-stickers.admin.sticker_section.import_zip_message'))) return;
+    if (!confirm(app.translator.trans('ramon-stickers.admin.sticker_section.import_zip_message', {}, true))) return;
 
     this.importState = { active: true, imported: 0, skipped: 0, total: 0, error: null };
     app.stickerListState.loading = true;
@@ -115,10 +105,8 @@ export default class StickerSection extends Component {
     xhr.onload = () => {
       app.stickerListState.loading = false;
 
-      // The server may respond with a non-JSON error body (e.g. a PHP fatal,
-      // a proxy timeout, an HTML 502). Catch JSON.parse so the UI surfaces a
-      // useful error instead of dying silently. Also treat any non-2xx status
-      // as an error even when the body is valid JSON.
+      // A resposta pode não ser JSON (fatal do PHP, 502 do proxy): mostra o
+      // trecho em vez de quebrar calado. Qualquer status fora de 2xx é erro.
       let data;
       try {
         data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
@@ -129,7 +117,7 @@ export default class StickerSection extends Component {
           imported: 0,
           skipped: 0,
           total: 0,
-          error: 'Server returned an unreadable response (status ' + xhr.status + '): ' + snippet,
+          error: app.translator.trans('ramon-stickers.admin.sticker_section.import_unreadable_response', { status: xhr.status, snippet }, true),
         };
         m.redraw();
         return;
@@ -141,7 +129,7 @@ export default class StickerSection extends Component {
           imported: 0,
           skipped: 0,
           total: 0,
-          error: data.error || 'HTTP ' + xhr.status,
+          error: data.error || data.errors?.[0]?.detail || 'HTTP ' + xhr.status,
         };
         m.redraw();
         return;
@@ -150,9 +138,6 @@ export default class StickerSection extends Component {
       this.importState = { active: false, imported: data.imported, skipped: data.skipped, total: data.total, error: null };
       m.redraw();
 
-      // Reload sticker list and clear cache after a short delay
-      app.request({ method: 'DELETE', url: app.forum.attribute('apiUrl') + '/cache' }).catch(() => {});
-      app.stickerListState.stickers = [];
       app.stickerListState.loadResults();
 
       setTimeout(() => {
@@ -162,7 +147,13 @@ export default class StickerSection extends Component {
     };
 
     xhr.onerror = () => {
-      this.importState = { active: false, imported: 0, skipped: 0, total: 0, error: 'Network error' };
+      this.importState = {
+        active: false,
+        imported: 0,
+        skipped: 0,
+        total: 0,
+        error: app.translator.trans('ramon-stickers.admin.sticker_section.network_error', {}, true),
+      };
       app.stickerListState.loading = false;
       m.redraw();
     };
@@ -171,7 +162,7 @@ export default class StickerSection extends Component {
   }
 
   importLegacyJson(file) {
-    if (!confirm(app.translator.trans('ramon-stickers.admin.sticker_section.import_stickers_message'))) return;
+    if (!confirm(app.translator.trans('ramon-stickers.admin.sticker_section.import_stickers_message', {}, true))) return;
 
     this.importState = { active: true, imported: 0, skipped: 0, total: 0, error: null };
     app.stickerListState.loading = true;
@@ -181,8 +172,7 @@ export default class StickerSection extends Component {
     reader.readAsText(file, 'UTF-8');
 
     reader.onload = (readerEvent) => {
-      // Catch malformed JSON before sending to the server — otherwise the
-      // exception was previously uncaught and the loading spinner spun forever.
+      // JSON quebrado para aqui; a exceção solta deixaria o spinner girando para sempre.
       let parsed;
       try {
         parsed = JSON.parse(readerEvent.target.result);
@@ -192,7 +182,7 @@ export default class StickerSection extends Component {
           imported: 0,
           skipped: 0,
           total: 0,
-          error: 'Invalid JSON file: ' + e.message,
+          error: app.translator.trans('ramon-stickers.admin.sticker_section.import_invalid_json', { error: e.message }, true),
         };
         app.stickerListState.loading = false;
         m.redraw();
@@ -204,14 +194,16 @@ export default class StickerSection extends Component {
           method: 'POST',
           url: `${app.forum.attribute('apiUrl')}/stickers/import`,
           body: { data: parsed },
+          // O erro aparece no aviso da seção, não num alerta a mais.
+          errorHandler: (error) => {
+            throw error;
+          },
         })
         .then((data) => {
           this.importState = { active: false, imported: data.imported, skipped: data.skipped, total: data.total, error: null };
           app.stickerListState.loading = false;
           m.redraw();
 
-          app.request({ method: 'DELETE', url: app.forum.attribute('apiUrl') + '/cache' }).catch(() => {});
-          app.stickerListState.stickers = [];
           app.stickerListState.loadResults();
 
           setTimeout(() => {
@@ -220,23 +212,21 @@ export default class StickerSection extends Component {
           }, 6000);
         })
         .catch((err) => {
-          this.importState = { active: false, imported: 0, skipped: 0, total: 0, error: String(err) };
+          const error = err?.response?.error || err?.response?.errors?.[0]?.detail || err?.message || String(err);
+          this.importState = { active: false, imported: 0, skipped: 0, total: 0, error };
           app.stickerListState.loading = false;
           m.redraw();
         });
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // Bulk upload — multiple files at once
-  // ---------------------------------------------------------------------------
-
   bulkUploadFiles() {
-    const categoryName = prompt(app.translator.trans('ramon-stickers.admin.sticker_section.bulk_upload_category_prompt'), 'Stickers');
-    if (categoryName === null) return; // cancelled
+    const defaultName = app.translator.trans('ramon-stickers.admin.sticker_section.bulk_upload_default_category', {}, true);
+    const categoryName = prompt(app.translator.trans('ramon-stickers.admin.sticker_section.bulk_upload_category_prompt', {}, true), defaultName);
+    if (categoryName === null) return;
 
     const category = sanitizeCategoryCode(categoryName || 'stickers') || 'stickers';
-    const catLabel = categoryName || 'Stickers';
+    const catLabel = categoryName || defaultName;
 
     const input = document.createElement('input');
     input.type = 'file';
@@ -260,9 +250,7 @@ export default class StickerSection extends Component {
     if (index >= files.length) {
       const { errors, total } = this.uploadState;
       this.uploadState = { active: false, current: total, total, errors };
-      app.stickerListState.stickers = [];
       app.stickerListState.loadResults();
-      app.request({ method: 'DELETE', url: app.forum.attribute('apiUrl') + '/cache' }).catch(() => {});
       m.redraw();
       setTimeout(() => {
         this.uploadState = null;
@@ -272,29 +260,17 @@ export default class StickerSection extends Component {
     }
 
     const file = files[index];
-    const formData = new FormData();
-    formData.append('file', file);
 
-    fetch(app.forum.attribute('apiUrl') + '/stickers/upload', {
-      method: 'POST',
-      headers: { 'X-CSRF-Token': app.session.csrfToken },
-      body: formData,
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.path) throw new Error(data.error || 'Upload failed');
-
-        const title = emojiToTitle(file.name);
-        const slug = emojiToSlug(file.name.replace(/\.[^.]+$/, ''));
-
-        return app.store.createRecord('stickers').save({
-          title,
-          textToReplace: ':' + slug + ':',
-          path: data.path,
+    this._uploadWithRetry(file, 0)
+      .then((path) =>
+        app.store.createRecord('stickers').save({
+          title: emojiToTitle(file.name),
+          textToReplace: emojiToCode(file.name),
+          path,
           category,
           categoryName,
-        });
-      })
+        })
+      )
       .catch((err) => {
         console.warn('[Stickers] Bulk upload error for', file.name, err);
         this.uploadState.errors++;
@@ -306,16 +282,25 @@ export default class StickerSection extends Component {
       });
   }
 
-  // ---------------------------------------------------------------------------
-  // Bulk delete selected stickers
-  // ---------------------------------------------------------------------------
+  /**
+   * Envio de um arquivo do lote. O limite é de 30 envios por minuto: no 429
+   * espera e tenta de novo, para um lote grande não falhar do 31º em diante.
+   */
+  _uploadWithRetry(file, attempt) {
+    return uploadStickerFile(file).catch((err) => {
+      if (err.status !== 429 || attempt >= THROTTLE_MAX_RETRIES) throw err;
+
+      return new Promise((resolve) => setTimeout(resolve, THROTTLE_RETRY_MS)).then(() => this._uploadWithRetry(file, attempt + 1));
+    });
+  }
 
   bulkDeleteSelected() {
     const state = app.stickerListState;
     const count = state.selectedCount;
     if (!count) return;
 
-    const msg = app.translator.trans('ramon-stickers.admin.sticker_section.delete_selected_confirm', { count });
+    // `true` devolve string; o array mostraria "Delete ,5, sticker(s)?" no confirm().
+    const msg = app.translator.trans('ramon-stickers.admin.sticker_section.delete_selected_confirm', { count }, true);
     if (!confirm(msg)) return;
 
     this.deletingSelected = true;
@@ -323,19 +308,22 @@ export default class StickerSection extends Component {
 
     const ids = state.selectedArray.slice();
 
-    // One bounded request instead of one DELETE per sticker — see
-    // BulkDeleteStickersController. The prior loop made N sequential round
-    // trips, which dragged on large selections.
     app
       .request({
         method: 'POST',
         url: app.forum.attribute('apiUrl') + '/stickers/bulk-delete',
         body: { ids },
+        errorHandler: (error) => {
+          throw error;
+        },
       })
       .then(() => {
-        ids.forEach((id) => state.removeFromList(id));
+        ids.forEach((id) => {
+          const sticker = app.store.getById('stickers', id);
+          if (sticker) app.store.remove(sticker);
+          state.removeFromList(id);
+        });
         state.exitSelectionMode();
-        app.request({ method: 'DELETE', url: app.forum.attribute('apiUrl') + '/cache' }).catch(() => {});
       })
       .catch((err) => {
         console.error('[Stickers] Bulk delete failed:', err);
@@ -347,47 +335,33 @@ export default class StickerSection extends Component {
       });
   }
 
-  // ---------------------------------------------------------------------------
-  // Settings
-  // ---------------------------------------------------------------------------
-
   setHoverPlay(value) {
-    this.hoverPlayEnabled = value;
-    this.savingHoverPlay = true;
-    m.redraw();
-
-    app
-      .request({
-        method: 'POST',
-        url: app.forum.attribute('apiUrl') + '/settings',
-        body: { 'ramon-stickers.hover-play': value ? '1' : '0' },
-      })
-      .finally(() => {
-        this.savingHoverPlay = false;
-        m.redraw();
-      });
+    this.saveSwitch('ramon-stickers.hover-play', value, 'hoverPlayEnabled', 'savingHoverPlay');
   }
 
   setShowTooltip(value) {
-    this.showTooltipEnabled = value;
-    this.savingShowTooltip = true;
+    this.saveSwitch('ramon-stickers.show-tooltip', value, 'showTooltipEnabled', 'savingShowTooltip');
+  }
+
+  /**
+   * O saveSettings() atualiza o app.data.settings, que o oninit lê ao voltar
+   * para a página. Se o save falhar, a chave volta.
+   */
+  saveSwitch(key, value, stateProp, savingProp) {
+    const previous = this[stateProp];
+    this[stateProp] = value;
+    this[savingProp] = true;
     m.redraw();
 
-    app
-      .request({
-        method: 'POST',
-        url: app.forum.attribute('apiUrl') + '/settings',
-        body: { 'ramon-stickers.show-tooltip': value ? '1' : '0' },
+    saveSettings({ [key]: value ? '1' : '0' })
+      .catch(() => {
+        this[stateProp] = previous;
       })
       .finally(() => {
-        this.savingShowTooltip = false;
+        this[savingProp] = false;
         m.redraw();
       });
   }
-
-  // ---------------------------------------------------------------------------
-  // Header action buttons
-  // ---------------------------------------------------------------------------
 
   topItems() {
     const items = new ItemList();
@@ -395,7 +369,6 @@ export default class StickerSection extends Component {
     const selecting = state.selectionMode;
 
     if (selecting) {
-      // ── Selection mode ──
       items.add(
         'deleteSelected',
         <Button
@@ -425,10 +398,14 @@ export default class StickerSection extends Component {
         10
       );
     } else {
-      // ── Normal mode ──
       items.add(
         'import',
-        <Button className="Button Button--secondary StickerSection-btn" icon="fas fa-file-import" onclick={() => this.importStickerList()}>
+        <Button
+          className="Button Button--secondary StickerSection-btn"
+          icon="fas fa-file-import"
+          disabled={!!this.importState?.active}
+          onclick={() => this.importStickerList()}
+        >
           {app.translator.trans('ramon-stickers.admin.sticker_section.import_button')}
         </Button>,
         40
@@ -473,10 +450,6 @@ export default class StickerSection extends Component {
 
     return items;
   }
-
-  // ---------------------------------------------------------------------------
-  // Status notices
-  // ---------------------------------------------------------------------------
 
   importNotice() {
     const s = this.importState;
@@ -537,12 +510,9 @@ export default class StickerSection extends Component {
     );
   }
 
-  // ---------------------------------------------------------------------------
-
   view() {
     return (
       <div className="ExtensionPage-stickerSection">
-        {/* ── Header ── */}
         <div className="StickerSection-header">
           <div className="container">
             <div className="StickerSection-titleRow">
@@ -552,13 +522,11 @@ export default class StickerSection extends Component {
               </div>
             </div>
 
-            {/* Status notices */}
             {this.importNotice()}
             {this.uploadNotice()}
           </div>
         </div>
 
-        {/* ── Settings bar ── */}
         <div className="StickerSection-settingsBar">
           <div className="container">
             <label className="StickerSection-settingRow">
@@ -578,7 +546,6 @@ export default class StickerSection extends Component {
           </div>
         </div>
 
-        {/* ── Sticker list ── */}
         <div className="container">
           <StickerList />
         </div>

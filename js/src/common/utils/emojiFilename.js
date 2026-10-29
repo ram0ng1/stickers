@@ -1,41 +1,48 @@
 import { replace as replaceEmoji } from 'node-emoji';
 
 /**
- * Convert emoji characters in a filename (without extension) to their
- * English names, producing a clean slug suitable for sticker titles and
- * text-replacement codes.
+ * Troca os emojis do nome do arquivo (sem extensão) pelo nome em inglês,
+ * gerando um slug para o título e o código do sticker.
  *
- * Examples:
+ * Exemplos:
  *   "😀_happy"      → "grinning_happy"
  *   "🎉party_time"  → "tada_party_time"
  *   "sticker_😂"    → "sticker_joy"
  *   "cool😎"        → "cool_sunglasses"
  */
 export function emojiToSlug(raw) {
-  // Replace each emoji with _name_ so adjacent text stays separated
   const replaced = replaceEmoji(raw, (emoji) => '_' + emoji.key + '_');
 
-  return replaced
-    .replace(/_+/g, '_') // collapse multiple underscores
-    .replace(/^_|_$/g, '') // trim leading/trailing underscores
-    .toLowerCase();
+  return replaced.replace(/_+/g, '_').replace(/^_|_$/g, '').toLowerCase();
 }
 
 /**
- * Convert a raw filename (with or without extension) to a human-readable
- * display title: emoji become their English names, underscores/hyphens
- * become spaces, result is title-cased.
+ * Gera um título legível a partir do nome do arquivo: emojis viram o nome em
+ * inglês, `_` e `-` viram espaço, iniciais maiúsculas.
  *
- * Examples:
+ * Exemplos:
  *   "😀_happy.tgs"  → "Grinning Happy"
  *   "party🎉time"   → "Party Tada Time"
  */
 export function emojiToTitle(filename) {
-  // Strip extension
   const base = filename.replace(/\.[^.]+$/, '');
 
   const slug = emojiToSlug(base);
 
-  // Replace _ and - with spaces, then title-case
   return slug.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Código do sticker (`:slug:`) a partir do nome do arquivo. Acentos e
+ * caracteres fora de `[a-z0-9_-]` viram `_`, como exige o servidor: um código
+ * como `:meu sticker:` seria recusado na criação, depois do arquivo enviado.
+ */
+export function emojiToCode(filename) {
+  const slug = emojiToSlug(filename.replace(/\.[^.]+$/, ''))
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return ':' + (slug || 'sticker') + ':';
 }

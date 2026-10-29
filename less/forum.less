@@ -1,20 +1,16 @@
-// -------------------------------------------------------
-// Sticker toolbar button — calibrate SVG to match FA solid icon visual weight
-// The sticker SVG paths have ~4px padding inside a 24px viewBox (≈83% fill).
-// FA icons fill ~90%+, so we scale up slightly to compensate.
-// -------------------------------------------------------
+// Botão da toolbar
+// Os paths do SVG têm ~4px de respiro num viewBox de 24px; o 1.5em compensa
+// para igualar o peso visual dos ícones sólidos do Font Awesome.
 
 .Button-Sticker {
-  font-size: 1.5em;  // makes the 1em SVG appear visually equal to FA icons
+  font-size: 1.5em;
 
   svg {
     vertical-align: -0.125em;
   }
 }
 
-// -------------------------------------------------------
-// Sticker Picker (floating panel) — minimalist style
-// -------------------------------------------------------
+// Seletor de stickers
 
 .StickerPicker-wrapper {
   position: fixed;
@@ -44,7 +40,6 @@
     }
   }
 
-  // Loading / empty states
   &-loading,
   &-empty {
     padding: 28px 16px;
@@ -53,7 +48,6 @@
     font-size: 13px;
   }
 
-  // Tab bar — scrollable row, no wrapping
   &-tabs {
     display: flex;
     flex-wrap: nowrap;
@@ -91,7 +85,6 @@
     }
   }
 
-  // Sticker grid
   &-grid {
     display: flex;
     flex-wrap: wrap;
@@ -108,9 +101,7 @@
   }
 }
 
-// -------------------------------------------------------
-// Individual sticker items (picker)
-// -------------------------------------------------------
+// Itens do seletor
 
 .StickerItem {
   display: inline-flex;
@@ -119,7 +110,6 @@
   border-radius: 8px;
   cursor: pointer;
   padding: 4px;
-  // Minimalist hover: background tint only, no scale
   transition: background .12s;
 
   &:hover {
@@ -139,11 +129,10 @@
   }
 
   &--animated {
-    // width/height driven by the player div inside
+    // tamanho definido pelo player interno
   }
 }
 
-// The div that lottie-web renders into inside the picker
 .StickerItem-player {
   width: 56px;
   height: 56px;
@@ -151,10 +140,8 @@
   overflow: hidden;
   border-radius: 4px;
 
-  // lottie-web creates a <canvas> inside this div. See the Firefox note on
-  // span.Sticker--lottie above — the canvas inherits intrinsic dimensions
-  // from the animation source, so we constrain explicitly with max-* to
-  // prevent any browser from rendering it past the parent's 56×56 box.
+  // O lottie-web cria o <canvas> com o tamanho intrínseco da animação;
+  // max-* impede que o Firefox o renderize além da caixa de 56px.
   canvas {
     width: 100% !important;
     height: 100% !important;
@@ -164,22 +151,16 @@
   }
 }
 
-// -------------------------------------------------------
-// Stickers rendered inside posts via TextFormatter
-// -------------------------------------------------------
+// Stickers nos posts
 
 span.Sticker {
   display: inline-block;
   vertical-align: middle;
 
   img.sticker {
-    // Constraint-driven sizing (works identically in Chrome, Firefox, Safari).
-    //
-    // The previous rule used `height: 5em; max-width: 10em;` which Firefox
-    // didn't always honor for replaced elements — large stickers rendered at
-    // their intrinsic pixel size. Setting `width: auto; height: auto` with
-    // BOTH `max-width` and `max-height` is the canonical scale-down pattern
-    // that every browser implements consistently.
+    // width/height auto com max-width e max-height: o Firefox nem sempre
+    // respeita height fixo em elementos substituídos, e este padrão escala
+    // igual em todos os navegadores.
     width: auto;
     height: auto;
     max-width: 10em;
@@ -189,16 +170,9 @@ span.Sticker {
     object-fit: contain;
   }
 
-  // Lottie JSON / TGS animated sticker in posts.
-  //
-  // IMPORTANT: this MUST be `inline-block`, not `inline-flex`. Firefox has a
-  // long-standing flexbox quirk (bug 1294939 / 1308636) where a flex
-  // container with a replaced element as a child (here: the <canvas> that
-  // lottie-web creates with intrinsic width/height from the animation file)
-  // can grow to accommodate the child's intrinsic size, ignoring the
-  // container's explicit width/height. Lottie source files are typically
-  // 512×512, so in Firefox the sticker rendered at ~512px instead of 5em.
-  // `inline-block` doesn't have this bug.
+  // Precisa ser inline-block, não inline-flex: no Firefox (bugs 1294939/1308636)
+  // o contêiner flex cresce até o tamanho intrínseco do <canvas> do lottie-web
+  // (em geral 512×512), ignorando width/height.
   &--lottie,
   &--tgs {
     display: inline-block;
@@ -208,11 +182,7 @@ span.Sticker {
     vertical-align: middle;
     overflow: hidden;
 
-    // lottie-web creates a <canvas> directly inside this span.
-    // The HTML width/height attributes on the canvas come from the source
-    // animation; the CSS overrides force it to fill the parent box exactly.
-    // `max-width: 100%` defends against Firefox letting the canvas grow past
-    // the parent based on its intrinsic dimensions.
+    // !important vence os atributos width/height que o lottie-web põe no canvas.
     canvas {
       width: 100% !important;
       height: 100% !important;
