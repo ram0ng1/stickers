@@ -60,7 +60,6 @@ app.initializers.add('ramon-stickers', () => {
     });
   });
   observer.observe(document.body, { childList: true, subtree: true });
-  initStickersInRoot(document.body);
 
   // Um picker por TextEditor.
   const instanceState = new WeakMap();

@@ -154,17 +154,20 @@ export default class StickerPicker extends Component {
         this.attrs.onClose();
       }
     };
+    // Na captura e sem propagar: o Escape fecha só o picker, não o compositor.
     this._keydownHandler = (e) => {
-      if (e.key === 'Escape') this.attrs.onClose();
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      this.attrs.onClose();
     };
     setTimeout(() => document.addEventListener('mousedown', this._outsideClickHandler), 10);
-    document.addEventListener('keydown', this._keydownHandler);
+    document.addEventListener('keydown', this._keydownHandler, true);
   }
 
   onremove(vnode) {
     super.onremove(vnode);
     document.removeEventListener('mousedown', this._outsideClickHandler);
-    document.removeEventListener('keydown', this._keydownHandler);
+    document.removeEventListener('keydown', this._keydownHandler, true);
   }
 
   loadStickers() {
