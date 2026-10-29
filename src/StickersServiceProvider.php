@@ -17,11 +17,15 @@ use Ramon\Stickers\Models\Sticker;
 
 class StickersServiceProvider extends AbstractServiceProvider
 {
-    public function boot(Formatter $formatter, StickerFiles $files): void
+    public function boot(): void
     {
         // Os stickers entram no formatador como emoticons; o cache dele cai a
         // cada mudança, venha ela do admin, da importação ou direto da API.
-        Sticker::saved(function (Sticker $sticker) use ($formatter, $files) {
+        // Os serviços só são resolvidos quando um sticker muda, não a cada requisição.
+        Sticker::saved(function (Sticker $sticker) {
+            $formatter = $this->container->make(Formatter::class);
+            $files = $this->container->make(StickerFiles::class);
+
             $formatter->flush();
 
             if ($sticker->wasChanged('path')) {
@@ -29,9 +33,9 @@ class StickersServiceProvider extends AbstractServiceProvider
             }
         });
 
-        Sticker::deleted(function (Sticker $sticker) use ($formatter, $files) {
-            $formatter->flush();
-            $files->deleteIfUnused($sticker->path);
+        Sticker::deleted(function (Sticker $sticker) {
+            $this->container->make(Formatter::class)->flush();
+            $this->container->make(StickerFiles::class)->deleteIfUnused($sticker->path);
         });
     }
 }
