@@ -17,17 +17,17 @@
 
 Stickers brings a sticker picker to the post composer. Upload your library in the admin panel, organize it in categories, and your users drop stickers into posts with one click. Each sticker also gets a text code like `:smile:` that is rewritten when the post renders.
 
-The fun part is animation support. Lottie JSON and Telegram TGS files play natively in posts, right alongside plain PNG, GIF, WebP, APNG and JPEG.
+The fun part is animation support. Lottie JSON and Telegram TGS files play natively in posts, right alongside plain PNG, GIF, WebP, APNG and JPEG. Animations use the lightweight lottie-web player, which does not run Lottie expressions (scripts embedded in the animation file), and it is only downloaded on pages that show an animated sticker.
 
 ## What it does
 
 - Floating sticker picker in the composer toolbar
-- Categories with drag and drop ordering
+- Categories you can rename and reorder
 - Native playback of Lottie and TGS animations via lottie-web
-- Bulk upload by dropping several files at once
+- Bulk upload of several files at once
 - Export of the whole library as a ZIP, importable on another forum with duplicates skipped
 - Optional hover only mode that keeps animations paused until the cursor is on them
-- Works on Flarum 1.8 and 2.x
+- Built for Flarum 2.x (PHP 8.3+)
 
 ## Installation
 
@@ -39,6 +39,8 @@ php flarum cache:clear
 ```
 
 Then enable Stickers on the Extensions page and start uploading.
+
+The PHP `fileinfo` extension is needed to validate uploaded files, and `zip` for the ZIP import and export.
 
 ## About TGS files
 
