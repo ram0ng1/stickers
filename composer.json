@@ -10,19 +10,48 @@
     ],
     "type": "flarum-extension",
     "license": "MIT",
+    "homepage": "https://github.com/ram0ng1/stickers",
     "authors": [
         {
             "name": "Ramon Guilherme",
             "email": "ramon@ramonguilherme.com.br",
-            "homepage": "https://ramonguilherme.com.br"
+            "homepage": "https://ramonguilherme.com.br",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/ram0ng1/stickers/issues",
+        "source": "https://github.com/ram0ng1/stickers"
+    },
+    "funding": [
+        {
+            "type": "website",
+            "url": "https://donate.stripe.com/fZe5o66nebkf39S28a"
         }
     ],
     "require": {
-        "flarum/core": "^2.0"
+        "php": "^8.3",
+        "flarum/core": "^2.0.0"
+    },
+    "require-dev": {
+        "flarum/phpstan": "^2.0",
+        "flarum/testing": "^2.0",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^11.5 || ^12.5.22 || ^13.2.0",
+        "roave/security-advisories": "dev-latest"
+    },
+    "suggest": {
+        "ext-fileinfo": "Required to validate the MIME type of uploaded and imported sticker files (uploads are refused without it).",
+        "ext-zip": "Required for the ZIP import and export of the sticker library."
     },
     "autoload": {
         "psr-4": {
             "Ramon\\Stickers\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ramon\\Stickers\\Tests\\": "tests/"
         }
     },
     "extra": {
@@ -34,9 +63,41 @@
                 "backgroundColor": "#fff",
                 "color": "#fff"
             }
+        },
+        "flarum-cli": {
+            "modules": {
+                "admin": true,
+                "forum": true,
+                "js": true,
+                "jsCommon": true,
+                "css": true,
+                "locale": true,
+                "typescript": true,
+                "backendTesting": true
+            }
         }
     },
-    "require-dev": {
-        "roave/security-advisories": "dev-latest"
-    }
+    "scripts": {
+        "analyse:phpstan": "phpstan analyse --memory-limit=2G",
+        "clear-cache:phpstan": "phpstan clear-result-cache",
+        "test": [
+            "@test:unit",
+            "@test:integration"
+        ],
+        "test:unit": "phpunit -c tests/phpunit.unit.xml",
+        "test:integration": [
+            "Composer\\Config::disableProcessTimeout",
+            "phpunit -c tests/phpunit.integration.xml"
+        ],
+        "test:setup": "@php tests/integration/setup.php"
+    },
+    "scripts-descriptions": {
+        "analyse:phpstan": "Run static analysis",
+        "test": "Runs all tests.",
+        "test:unit": "Runs all unit tests.",
+        "test:integration": "Runs all integration tests.",
+        "test:setup": "Sets up a database for use with integration tests. Execute this only once."
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }

@@ -1,22 +1,22 @@
 name: Release Workflow
 
 on:
-  # Fires when a PR carrying the "release" label is MERGED into main.
-  # The bump type comes from the PR labels:
-  #   - label "BC"     => minor (e.g. 2.0.11 -> 2.1.0)
-  #   - any other      => patch (e.g. 2.0.11 -> 2.0.12)
-  # The version is derived from the LATEST git tag — composer.json no longer
-  # carries a "version" field (single source of truth = VCS tags).
+  # Dispara quando um PR é MESCLADO no main carregando a label "release".
+  # O tipo de incremento vem das labels do PR:
+  #   - label "BC"        => minor (ex.: 2.1.25 -> 2.2.0)
+  #   - qualquer outra    => patch (ex.: 2.1.25 -> 2.1.26)
+  # A versão é derivada da ÚLTIMA TAG git — o composer.json NÃO tem mais
+  # campo "version" (fonte única de verdade = tags do VCS).
   pull_request:
     types: [closed]
     branches:
       - main
-  # Manual escape hatch: publish a release choosing the bump explicitly
-  # (includes "major", which the automatic flow never does).
+  # Escape hatch manual: permite publicar um release escolhendo o bump
+  # explicitamente (inclui "major", que o fluxo automático nunca faz).
   workflow_dispatch:
     inputs:
       bump:
-        description: 'Version increment type'
+        description: 'Tipo de incremento da versão'
         required: true
         type: choice
         default: patch
@@ -25,53 +25,54 @@ on:
           - minor
           - major
 
-# CLAUDE.md §35.13/C1 — default-deny token scope at the workflow level.
+# §35.13 C1 — default-deny. Job declara o que precisa.
 permissions: {}
 
-# CLAUDE.md §35.13/I4 — serialize releases; never cancel a release mid-flight
-# (a half-published tag would need manual cleanup).
+# §35.13 I4 — serializa releases; nunca cancela um em andamento (um release
+# pela metade exigiria limpeza manual de tag).
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
   build_and_release:
-    name: Build and Auto-Publish
+    name: Build e Publicação Automática
     runs-on: ubuntu-latest
-    # Runs only on manual dispatch OR a merged PR carrying the "release" label.
+    # Só roda em dispatch manual OU em PR mesclado que tenha a label "release".
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.merged == true &&
        contains(github.event.pull_request.labels.*.name, 'release'))
     permissions:
-      contents: write           # create releases + tags
-      pull-requests: read       # release-drafter needs to read merged PRs
-      id-token: write           # CLAUDE.md §35.13/R4 — SLSA attestation
-      attestations: write       # CLAUDE.md §35.13/R4 — SLSA attestation
+      contents: write          # cria tag/release
+      pull-requests: read      # release-drafter lê PRs mesclados
+      id-token: write          # §35.13 R4 — attest-build-provenance
+      attestations: write      # §35.13 R4
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+      # §35.13 I3 — auditar todo egress (em modo audit; promover a block depois).
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
         with:
           egress-policy: audit
 
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Checkout do código
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
-          # fetch-depth: 0 brings the full history AND all tags — required to
-          # compute the next version from the latest tag.
+          # fetch-depth: 0 traz todo o histórico E todas as tags — necessário
+          # para calcular a próxima versão a partir da última tag.
           fetch-depth: 0
-          # Merged PR: point at the real merge commit on main.
-          # Manual dispatch: HEAD of the chosen branch (default main).
+          # PR mesclado: aponta para o commit de merge real no main.
+          # Dispatch manual: HEAD da branch escolhida (default main).
           ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Configurar Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
         with:
           node-version: 20
           cache: 'npm'
           cache-dependency-path: js/package-lock.json
 
-      - name: Install JS dependencies
+      - name: Instalar Dependências JS
         run: |
           cd js
           npm ci
@@ -81,7 +82,7 @@ jobs:
           cd js
           npm run build
 
-      - name: Compute next version
+      - name: Calcular próxima versão
         id: version
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -90,84 +91,165 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 1. Determine the bump type.
+          # 1. Determina o tipo de bump.
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             BUMP="$DISPATCH_BUMP"
           else
-            # Label "BC" on the PR => minor; any other type label => patch.
+            # Label "BC" no PR => minor; qualquer outra label de tipo => patch.
             case ",$PR_LABELS," in
               *,BC,*) BUMP="minor" ;;
               *)      BUMP="patch" ;;
             esac
           fi
-          echo "Bump: $BUMP (PR labels: ${PR_LABELS:-<manual dispatch>})"
+          echo "Bump: $BUMP (labels do PR: ${PR_LABELS:-<dispatch manual>})"
 
-          # 2. Latest version tag (semver). The 'v[0-9]*' glob + version sort
-          #    pick the highest tag; %%-* drops any legacy pre-release suffix
-          #    (e.g. -beta), since we now publish stable releases.
+          # 2. Última tag de versão (semver). O glob 'v[0-9]*' e o sort por
+          #    versão pegam a maior tag; %%-* descarta qualquer sufixo legado
+          #    de pré-release (ex.: -beta), pois agora publicamos estáveis.
           LATEST="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n1 || true)"
           LATEST="${LATEST:-v0.0.0}"
           CORE="${LATEST#v}"
           CORE="${CORE%%-*}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CORE"
           MAJOR="${MAJOR:-0}"; MINOR="${MINOR:-0}"; PATCH="${PATCH:-0}"
-          echo "Latest tag: $LATEST -> base ${MAJOR}.${MINOR}.${PATCH}"
+          echo "Última tag: $LATEST -> base ${MAJOR}.${MINOR}.${PATCH}"
 
-          # 3. Increment according to the bump.
+          # 3. Incrementa conforme o bump.
           case "$BUMP" in
             major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
             minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
             patch) PATCH=$((PATCH + 1)) ;;
-            *) echo "::error::Invalid bump: '$BUMP'"; exit 1 ;;
+            *) echo "::error::Bump inválido: '$BUMP'"; exit 1 ;;
           esac
 
           VERSION="${MAJOR}.${MINOR}.${PATCH}"
           TAG="v${VERSION}"
 
-          # 4. Idempotency guard — never republish an existing tag.
+          # 4. Garante idempotência — não republica uma tag existente.
           if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
-            echo "::error::Tag ${TAG} already exists — nothing to publish."
+            echo "::error::A tag ${TAG} já existe — nada a publicar."
             exit 1
           fi
 
-          echo "New version: ${VERSION} (tag ${TAG})"
+          echo "Nova versão: ${VERSION} (tag ${TAG})"
           {
             echo "version=${VERSION}"
             echo "tag=${TAG}"
             echo "bump=${BUMP}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Publish GitHub Release
+      # Só pede `php flarum migrate` quando a release traz migração nova desde a
+      # última tag. Arquivo novo em migrations/ é o único sinal confiável: uma
+      # migração já publicada e depois editada não roda de novo.
+      - name: Montar instruções de atualização
+        id: upgrade
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          LATEST="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n1 || true)"
+
+          if [ -n "$LATEST" ]; then
+            NEW_MIGRATIONS="$(git diff --name-only --diff-filter=A "$LATEST" HEAD -- migrations/ || true)"
+          else
+            NEW_MIGRATIONS="$(git ls-files migrations/)"
+          fi
+
+          {
+            echo "## 📦 Como atualizar"
+            echo
+            if [ -n "$NEW_MIGRATIONS" ]; then
+              echo "> [!IMPORTANT]"
+              echo "> Esta versão altera o banco de dados. Rode \`php flarum migrate\` depois de atualizar."
+              echo
+            fi
+            echo '```bash'
+            echo "composer require ramon/stickers:${VERSION}"
+            if [ -n "$NEW_MIGRATIONS" ]; then
+              echo "php flarum migrate"
+            fi
+            echo "php flarum cache:clear"
+            echo "php flarum assets:publish"
+            echo '```'
+          } > "$RUNNER_TEMP/upgrade.md"
+
+          if [ -n "$NEW_MIGRATIONS" ]; then
+            echo "Migrações novas desde ${LATEST:-<sem tag>}:"
+            echo "$NEW_MIGRATIONS"
+            echo "migrate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nenhuma migração nova desde ${LATEST:-<sem tag>}."
+            echo "migrate=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "latest=${LATEST}" >> "$GITHUB_OUTPUT"
+
+          cat "$RUNNER_TEMP/upgrade.md"
+
+      # As notas em inglês, com links absolutos para o GitHub, depois do
+      # pt-BR: prontas para colar fora dele (o tópico da extensão no
+      # discuss.flarum.org). O título em inglês de cada PR vem da linha
+      # "EN: …" da descrição do PR; sem ela, vai o título do PR. O marcador
+      # `<!-- en -->` separa as duas partes (o post do fórum leva só o pt-BR).
+      - name: Notas em inglês
+        id: notes_en
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          LATEST_TAG: ${{ steps.upgrade.outputs.latest }}
+          MIGRATE: ${{ steps.upgrade.outputs.migrate }}
+          OUTPUT: ${{ runner.temp }}/notes-en.md
+        run: |
+          set -euo pipefail
+
+          node .github/scripts/release-notes-en.mjs
+
+          DELIM="EOF_$(openssl rand -hex 8)"
+          {
+            echo "footer<<${DELIM}"
+            cat "$RUNNER_TEMP/upgrade.md"
+            echo
+            echo "<!-- en -->"
+            echo
+            echo "---"
+            echo
+            cat "$OUTPUT"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
+
+          cat "$OUTPUT"
+
+      - name: Publicar Release
         id: create_release
-        uses: release-drafter/release-drafter@693d20e7c1ce1a81d3a41962f85914253b518449 # v7.3.1
+        uses: release-drafter/release-drafter@eada3c96a64734dd381cfbda23511034e328ddb0  # v7.6.0
         with:
           publish: true
-          # Version computed above — overrides the version-resolver in
-          # .github/release-drafter.yml (kept there only as documentation).
+          # Versão calculada acima — sobrepõe o version-resolver do
+          # .github/release-drafter.yml (que fica só como documentação).
           version: ${{ steps.version.outputs.version }}
           tag: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
-          # Point the tag/release at the real merge commit (not the simulated
-          # merge ref of the pull_request event).
+          # Aponta a tag/release para o commit de merge real (não para o
+          # merge simulado do evento pull_request).
           commitish: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          # "Como atualizar" (com `php flarum migrate` só quando há migração
+          # nova) e as notas em inglês, montados nos passos anteriores.
+          footer: ${{ steps.notes_en.outputs.footer }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Attest build provenance (SLSA)
-        # CLAUDE.md §35.13/R4 — signed provenance for release artifacts.
+      # §35.13 R4 — provenance assinada (SLSA) para os artefatos do release.
+      - name: Atestar provenance dos artefatos
         if: steps.create_release.outcome == 'success'
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
         with:
           subject-path: |
             composer.json
-            js/dist/forum.js
-            js/dist/admin.js
+            js/dist/*.js
 
-      - name: Post release to Flarum forum
-        if: |
-          steps.create_release.outcome == 'success'
-          && steps.create_release.outputs.html_url
-          && vars.FLARUM_DISCUSSION_ID != ''
+      - name: Publicar Release no Flarum
+        if: steps.create_release.outcome == 'success' && steps.create_release.outputs.html_url && vars.FLARUM_DISCUSSION_ID != ''
         env:
           FLARUM_API_KEY: ${{ secrets.FLARUM_API_KEY }}
           FLARUM_DISCUSSION_ID: ${{ vars.FLARUM_DISCUSSION_ID }}
@@ -175,8 +257,9 @@ jobs:
           RELEASE_BODY: ${{ steps.create_release.outputs.body }}
           RELEASE_URL: ${{ steps.create_release.outputs.html_url }}
         run: |
-          # Extract version from tag (remove leading 'v' if present)
           VERSION="${RELEASE_TAG#v}"
+          # Só o pt-BR: as notas em inglês (depois do marcador) são para o discuss.
+          RELEASE_BODY="${RELEASE_BODY%%<!-- en -->*}"
 
           PAYLOAD=$(jq -n \
             --arg tag "$RELEASE_TAG" \
@@ -188,7 +271,7 @@ jobs:
               "data": {
                 "type": "posts",
                 "attributes": {
-                  "content": ("## " + $tag + "\n\n" + $body + "\n\n**Installation:**\n```\ncomposer require ramon/stickers:" + $version + "\n```\n\n[See release on GitHub](" + $url + ")")
+                  "content": ("## 🚀 " + $tag + "\n\n" + $body + "\n\n**Instalação:**\n```\ncomposer require ramon/stickers:" + $version + "\n```\n\n[Ver release no GitHub](" + $url + ")")
                 },
                 "relationships": {
                   "discussion": {
@@ -210,19 +293,20 @@ jobs:
           echo "HTTP Status: $HTTP_STATUS"
 
           if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
-            echo "Comment published successfully on Flarum."
+            echo "✅ Comentário publicado com sucesso no Flarum!"
             echo "Post ID: $(jq -r '.data.id // empty' /tmp/flarum_response.json)"
           else
-            echo "Failed to publish comment on Flarum (HTTP $HTTP_STATUS)"
+            echo "❌ Falha ao publicar comentário no Flarum (HTTP $HTTP_STATUS)"
             echo "Response body:"
             jq '.' /tmp/flarum_response.json
             exit 1
           fi
 
-      - name: Status log
+      - name: Log de Status
         if: always()
         run: |
           echo "Bump:        ${{ steps.version.outputs.bump }}"
-          echo "New version: ${{ steps.version.outputs.version }}"
+          echo "Nova versão: ${{ steps.version.outputs.version }}"
           echo "Tag:         ${{ steps.version.outputs.tag }}"
+          echo "Migrate:     ${{ steps.upgrade.outputs.migrate }}"
           echo "Release URL: ${{ steps.create_release.outputs.html_url }}"

@@ -1,30 +1,32 @@
-name: Cleanup Old Releases
+name: Limpar Releases Antigas
 
 on:
   workflow_dispatch:
 
-# CLAUDE.md §35.13/C1 — default-deny token scope at the workflow level.
+# 🔴 C1 — Default-deny no nível do workflow.
 permissions: {}
 
-# CLAUDE.md §35.13/I4 — never run two cleanups in parallel; they mutate the same
-# release set and could race.
+# 🟠 I4 — Serializa para evitar duas limpezas concorrentes deletando o mesmo conjunto.
 concurrency:
   group: cleanup-releases
   cancel-in-progress: false
 
 jobs:
   cleanup:
-    name: Keep only the last 5 releases
+    name: Manter apenas as 5 últimas releases
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      # 🟠 I3 — Harden-runner: job usa GITHUB_TOKEN com contents:write.
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
+          allowed-endpoints: >
+            api.github.com:443
 
-      - name: Delete old releases
+      - name: Apagar releases antigas
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -36,16 +38,19 @@ jobs:
               { owner: context.repo.owner, repo: context.repo.repo, per_page: 100 }
             );
 
-            // Sort by published_at descending (newest first)
-            releases.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+            // Sort by published_at descending (newest first).
+            // Drafts (no published_at) sort to the bottom by treating null as epoch.
+            releases.sort((a, b) =>
+              new Date(b.published_at || 0) - new Date(a.published_at || 0)
+            );
 
             const toDelete = releases.slice(KEEP);
 
-            console.log(`Total releases: ${releases.length}`);
-            console.log(`Keeping the ${KEEP} most recent, deleting ${toDelete.length}`);
+            console.log(`Total de releases: ${releases.length}`);
+            console.log(`Mantendo as ${KEEP} mais recentes, apagando ${toDelete.length}`);
 
             for (const release of toDelete) {
-              console.log(`Deleting release: ${release.tag_name} (id: ${release.id})`);
+              console.log(`Apagando release: ${release.tag_name} (id: ${release.id})`);
 
               // Delete the release
               await github.rest.repos.deleteRelease({
@@ -61,10 +66,10 @@ jobs:
                   repo: context.repo.repo,
                   ref: `tags/${release.tag_name}`,
                 });
-                console.log(`  Tag ${release.tag_name} deleted`);
+                console.log(`  Tag ${release.tag_name} apagada`);
               } catch (e) {
-                console.log(`  Tag ${release.tag_name} not found or already deleted`);
+                console.log(`  Tag ${release.tag_name} não encontrada ou já apagada`);
               }
             }
 
-            console.log('Cleanup complete.');
+            console.log('✅ Limpeza concluída!');

@@ -1,19 +1,28 @@
 <?php
 
+/*
+ * This file is part of ramon/stickers.
+ *
+ * Copyright (c) 2026 Ramon Guilherme.
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 namespace Ramon\Stickers\Api\Controller;
 
-use Flarum\Foundation\Paths;
 use Flarum\Http\RequestUtil;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Ramon\Stickers\StickerFiles;
 
 class UploadStickerController implements RequestHandlerInterface
 {
-    public const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
+    public const MAX_BYTES = 8 * 1024 * 1024;
 
-    /** @var array<string, string[]> Whitelisted extensions → allowed MIME types. */
+    /** @var array<string, string[]> Extensão aceita → tipos MIME aceitos. */
     public const ALLOWED = [
         'json' => ['application/json', 'text/plain'],
         'tgs'  => ['application/gzip', 'application/x-gzip', 'application/octet-stream'],
@@ -26,8 +35,9 @@ class UploadStickerController implements RequestHandlerInterface
     ];
 
     public function __construct(
-        protected Paths $paths
-    ) {}
+        protected StickerFiles $files
+    ) {
+    }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
@@ -45,7 +55,7 @@ class UploadStickerController implements RequestHandlerInterface
             return new JsonResponse(['error' => 'Upload error: ' . $file->getError()], 400);
         }
 
-        // Size: reject null (chunked without Content-Length) and oversized.
+        // Tamanho null: envio chunked sem Content-Length.
         $size = $file->getSize();
         if ($size === null || $size <= 0 || $size > self::MAX_BYTES) {
             return new JsonResponse(['error' => 'File size invalid or exceeds limit'], 400);
@@ -58,7 +68,7 @@ class UploadStickerController implements RequestHandlerInterface
             return new JsonResponse(['error' => 'Unsupported file type: ' . $extension], 400);
         }
 
-        // MIME server-side via finfo (defense in depth — extension is forgeable).
+        // MIME pelo conteúdo: a extensão o cliente escolhe.
         $tmpPath = $file->getStream()->getMetadata('uri');
         $detectedMime = null;
         if (is_string($tmpPath) && is_readable($tmpPath)) {
@@ -76,12 +86,12 @@ class UploadStickerController implements RequestHandlerInterface
             return new JsonResponse(['error' => 'MIME mismatch for ' . $extension], 400);
         }
 
-        $dir = $this->paths->public . '/assets/stickers/';
+        $dir = $this->files->directory().'/';
         if (! is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
 
-        // Filename generated server-side; client-supplied name is ignored.
+        // Nome gerado no servidor; o do cliente é ignorado.
         $filename = bin2hex(random_bytes(16)) . '.' . $extension;
         $dest     = $dir . $filename;
 

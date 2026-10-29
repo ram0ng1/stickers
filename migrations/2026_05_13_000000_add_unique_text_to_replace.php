@@ -1,16 +1,22 @@
 <?php
 
+/*
+ * This file is part of ramon/stickers.
+ *
+ * Copyright (c) 2026 Ramon Guilherme.
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 
-// CLAUDE.md §R-3: prevent TOCTOU duplicates on text_to_replace.
-// The application-level `where(...)->exists()` check in ImportStickersController
-// is racy under concurrent Creates; enforcing uniqueness at the DB level closes
-// the race.
+// Índice UNIQUE em text_to_replace: a checagem da aplicação sozinha tem corrida
+// entre duas criações simultâneas.
 //
-// Pre-clean any existing duplicates BEFORE adding the unique index (mirrors
-// flarum/flags migration pattern — CLAUDE.md §34/I) so this migration doesn't
-// crash on dirty production data.
+// Os duplicados existentes saem antes do índice, para a migração não quebrar
+// com dados antigos.
 
 return [
     'up' => function (Builder $schema) {
@@ -20,8 +26,8 @@ return [
 
         $connection = $schema->getConnection();
 
-        // 1) Pre-clean — keep the lowest id per text_to_replace, delete the rest.
-        //    Skip NULLs (they're allowed under the current nullable column).
+        // 1) Mantém o menor id de cada text_to_replace e apaga o resto. NULL fica
+        //    (a coluna aceita).
         $duplicates = $connection->table('stickers')
             ->select('text_to_replace')
             ->whereNotNull('text_to_replace')
@@ -44,22 +50,16 @@ return [
             }
         }
 
-        // 2) Add the unique index idempotently. Previously we read
-        //    INFORMATION_SCHEMA.STATISTICS to detect the existing index, but that
-        //    is MySQL-specific and breaks on any non-MySQL backend Flarum may end
-        //    up supporting (PostgreSQL ships INFORMATION_SCHEMA but populates it
-        //    differently; SQLite has no INFORMATION_SCHEMA at all).
-        //
-        //    Instead we just try to add the index and swallow the "already exists"
-        //    error — portable across every driver. Any OTHER error still bubbles
-        //    up so dirty-state failures stay visible.
+        // 2) Cria o índice e ignora só o erro de "já existe", o que funciona em
+        //    qualquer banco (o SQLite não tem INFORMATION_SCHEMA). Qualquer outro
+        //    erro sobe.
         try {
             $schema->table('stickers', function (Blueprint $table) {
                 $table->unique('text_to_replace');
             });
         } catch (\Throwable $e) {
             $message = strtolower($e->getMessage());
-            // MySQL: "Duplicate key name", SQLite: "index ... already exists",
+            // MySQL: "Duplicate key name"; SQLite: "index ... already exists";
             // PostgreSQL: "relation ... already exists".
             $alreadyExists = str_contains($message, 'duplicate key name')
                 || str_contains($message, 'already exists');
@@ -78,7 +78,7 @@ return [
                 $table->dropUnique(['text_to_replace']);
             });
         } catch (\Throwable $e) {
-            // If the index isn't there, rollback should still succeed.
+            // Sem o índice, o rollback segue mesmo assim.
         }
     },
 ];

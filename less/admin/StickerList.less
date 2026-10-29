@@ -1,6 +1,4 @@
-// -------------------------------------------------------
-// Section header (title row + action buttons)
-// -------------------------------------------------------
+// Cabeçalho da seção
 
 .StickerSection-header {
   padding: 20px 0 0;
@@ -21,8 +19,7 @@
   }
 }
 
-// Import / Export buttons wrapper
-// listItems() wraps each item in <li class="item-X"> — reset <ul> styles
+// listItems() envolve cada item em <li class="item-X">, daí o reset de lista.
 .StickerSection-actions {
   ul {
     list-style: none;
@@ -43,7 +40,6 @@
   }
 }
 
-// Shared button style overrides for the Import / Export buttons
 .StickerSection-btn {
   display: inline-flex;
   align-items: center;
@@ -63,9 +59,7 @@
   }
 }
 
-// -------------------------------------------------------
-// Import/Upload status notices
-// -------------------------------------------------------
+// Avisos de importação/upload
 
 .StickerSection-notice {
   display: flex;
@@ -92,9 +86,7 @@
   }
 }
 
-// -------------------------------------------------------
-// Settings bar (hover-play toggle)
-// -------------------------------------------------------
+// Configurações
 
 .StickerSection-settingsBar {
   background: var(--control-bg, rgba(0,0,0,.04));
@@ -132,9 +124,7 @@
   }
 }
 
-// -------------------------------------------------------
-// Add sticker button (top of list)
-// -------------------------------------------------------
+// Botão de adicionar
 
 .StickerAddButton {
   display: inline-flex;
@@ -177,9 +167,7 @@
   }
 }
 
-// -------------------------------------------------------
-// Category filter tabs
-// -------------------------------------------------------
+// Filtro de categorias
 
 .StickerCategoryFilter {
   display: flex;
@@ -233,13 +221,9 @@
   }
 }
 
-// -------------------------------------------------------
-// Sticker list grid
-// -------------------------------------------------------
+// Lista de stickers
 
 .sticker-list {
-
-  // ── Sticker card ──────────────────────────────────────
 
   .customSticker {
     position: relative;
@@ -262,7 +246,6 @@
       opacity: 1;
     }
 
-    // Image wrapper — same size for all cards
     &-imageWrapper {
       width: 80px;
       height: 80px;
@@ -287,8 +270,7 @@
       display: block;
     }
 
-    // Lottie / TGS player container
-    // lottie-web creates a <canvas> inside this div
+    // !important vence os atributos width/height que o lottie-web põe no canvas.
     &-player {
       width: 80px;
       height: 80px;
@@ -312,10 +294,7 @@
     }
   }
 
-
-  // ── Selection mode ──────────────────────────────────────────────────────────
-
-  // Selected state on a card
+  // Modo de seleção
   .customSticker.is-selected {
     .customSticker-imageWrapper {
       border-color: var(--primary-color);
@@ -323,7 +302,6 @@
     }
   }
 
-  // Check indicator
   .customSticker-selectMark {
     position: absolute;
     top: 3px;
@@ -339,7 +317,6 @@
     }
   }
 
-  // In selection mode — make card look interactive, remove edit button hover
   &.StickerList--selecting {
     .customSticker {
       cursor: pointer;
@@ -351,9 +328,7 @@
   }
 }
 
-// -------------------------------------------------------
-// Category sections inside the sticker list
-// -------------------------------------------------------
+// Categorias
 
 .StickerCategory {
   margin-top: 20px;
@@ -388,7 +363,6 @@
     }
   }
 
-  // Up/Down order buttons
   &-orderBtns {
     display: inline-flex;
     gap: 1px;
@@ -427,7 +401,6 @@
     }
   }
 
-  // Pencil button that appears on category header hover
   &-renameBtn {
     display: inline-flex;
     align-items: center;
@@ -448,12 +421,10 @@
     }
   }
 
-  // Show rename button when hovering the header row
   &-header:hover &-renameBtn {
     opacity: 1;
   }
 
-  // Inline rename form (replaces the header)
   &-renameForm {
     margin-bottom: 10px;
     padding: 10px 12px;
@@ -506,7 +477,6 @@
   margin-top: 16px;
 }
 
-// Library attribution label (shown when animated stickers are present)
 .StickerList-animLib {
   margin-top: 14px;
   font-size: 11px;
@@ -521,9 +491,7 @@
   }
 }
 
-// -------------------------------------------------------
-// Upload widget inside the edit modal
-// -------------------------------------------------------
+// Upload no modal de edição
 
 .StickerUpload {
   display: flex;
@@ -544,8 +512,6 @@
     border: 1px solid var(--control-bg-shaded);
   }
 
-  // Lottie / TGS animated preview (autoplays)
-  // lottie-web creates a <canvas> inside this div
   &-animPreview {
     width: 64px;
     height: 64px;
