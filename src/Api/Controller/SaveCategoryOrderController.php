@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * This file is part of ramon/stickers.
+ *
+ * Copyright (c) 2026 Ramon Guilherme.
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 namespace Ramon\Stickers\Api\Controller;
 
 use Flarum\Foundation\ValidationException;
@@ -17,24 +26,22 @@ class SaveCategoryOrderController implements RequestHandlerInterface
 
     public function __construct(
         protected SettingsRepositoryInterface $settings
-    ) {}
+    ) {
+    }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        // CLAUDE.md §R-5: throw, don't return — let the framework format the 403.
         RequestUtil::getActor($request)->assertAdmin();
 
-        $body  = $request->getParsedBody() ?? [];
+        $body  = (array) ($request->getParsedBody() ?? []);
         $order = $body['order'] ?? [];
 
         if (! is_array($order)) {
             throw new ValidationException(['order' => 'Order must be an array']);
         }
 
-        // CLAUDE.md §R-4: bound entry count and length.
         $order = array_slice($order, 0, self::MAX_ENTRIES);
 
-        // Sanitize: cast to string, bound length, validate charset, drop empties.
         $order = array_values(array_filter(array_map(
             fn ($v) => mb_substr(trim((string) $v), 0, self::MAX_CATEGORY_LEN),
             $order

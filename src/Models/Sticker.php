@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * This file is part of ramon/stickers.
+ *
+ * Copyright (c) 2026 Ramon Guilherme.
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 namespace Ramon\Stickers\Models;
 
 use Flarum\Database\AbstractModel;
@@ -15,6 +24,10 @@ use Flarum\Database\AbstractModel;
 class Sticker extends AbstractModel
 {
     protected $table = 'stickers';
+
+    protected $casts = [
+        'id' => 'integer',
+    ];
 
     public static function build(string $category, string $categoryName, string $title, string $textToReplace, string $path): static
     {

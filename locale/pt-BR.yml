@@ -1,0 +1,81 @@
+ramon-stickers:
+  admin:
+    settings:
+      hover_play_label: "Tocar animações só no hover"
+      hover_play_help: "Ligado, as animações Lottie e TGS dos posts ficam paradas no primeiro quadro e só tocam com o mouse em cima."
+      show_tooltip_label: "Mostrar o nome do sticker no hover"
+      show_tooltip_help: "Ligado, o nome do sticker aparece como dica ao passar o mouse sobre ele nos posts ou no seletor."
+
+    upload:
+      failed: "Falha no envio"
+      failed_with_error: "Falha no envio: {error}"
+
+    sticker_section:
+      heading_title: Stickers
+      import_button: Importar
+      export_button: Exportar ZIP
+      export_error: "A exportação falhou. Tente de novo."
+      import_zip_message: "Isto importa stickers de um arquivo ZIP (exportado por esta extensão). Os arquivos vão para /assets/stickers/ e os registros existentes NÃO são sobrescritos. Continuar?"
+      import_stickers_message: "Isto importa os dados dos stickers de um arquivo JSON. Os arquivos NÃO vêm junto: eles já precisam estar enviados. Continuar?"
+      importing_message: "Importando, aguarde..."
+      import_result: "Pronto: {imported} importados, {skipped} pulados (já existiam ou eram inválidos)."
+      import_error_message: "A importação falhou: {error}"
+      import_unreadable_response: "O servidor devolveu uma resposta ilegível (status {status}): {snippet}"
+      import_invalid_json: "Arquivo JSON inválido: {error}"
+      network_error: "Erro de rede"
+      bulk_upload_button: "Enviar vários"
+      bulk_upload_category_prompt: "Nome da categoria destes stickers:"
+      bulk_upload_default_category: Stickers
+      bulk_upload_progress: "Enviando {current}/{total}..."
+      bulk_upload_done: "Pronto: {uploaded} enviados, {errors} com erro."
+      select_button: "Selecionar"
+      cancel_select_button: "Cancelar"
+      delete_selected_button: "Excluir ({count})"
+      delete_selected_confirm: "Excluir {count} sticker(s)? Não dá para desfazer."
+      delete_selected_error: "Não foi possível excluir os stickers selecionados. Tente de novo."
+
+      edit_sticker:
+        modal_title: Adicionar sticker
+        edit_button: Editar sticker
+        sticker_category_label: Código da categoria
+        category_name_label: Nome da categoria
+        sticker_title_label: Título do sticker
+        text_to_replace_label: "Texto a substituir (ex.: :sticker:)"
+        path_or_url_label: Caminho ou URL
+        category_help: "Só letras minúsculas, números e sublinhado. Caracteres especiais são convertidos automaticamente."
+        upload_label: "Enviar arquivo"
+        upload_button: Escolher arquivo
+        upload_help: "Aceita Lottie JSON animado (.json), stickers do Telegram (.tgs), PNG, GIF, WebP e JPEG."
+        preview_alt: Prévia
+        submit_button: => core.ref.save_changes
+        delete_sticker_button: Excluir sticker
+        delete_sticker_confirmation: "Tem certeza de que quer excluir este sticker?"
+        saved_message: => core.admin.settings.saved_message
+        deleted_message: "Sticker excluído."
+        save_error: "Não foi possível salvar o sticker. Confira os dados e tente de novo."
+        tgs_notice_title: "Aviso de licença: arquivo TGS"
+        tgs_notice_body: "Arquivos TGS são stickers animados do Telegram e podem ter restrições de direitos autorais ou de distribuição definidas pelos autores. Ao salvar este sticker você confirma que tem o direito de usar e distribuir o conteúdo e assume toda a responsabilidade legal por isso."
+        external_anim_notice_title: "Sticker animado em URL externa"
+        external_anim_notice_body: "Stickers animados (.json / .tgs) precisam estar no domínio deste fórum para tocar. Arquivos de uma URL externa não animam para os visitantes: envie o arquivo ou use um caminho do próprio fórum."
+
+      sticker_list:
+        add_button: Adicionar sticker
+        all_tab: Todos
+        load_more_button: => core.forum.post_stream.load_more_button
+        move_category_error: "Não foi possível salvar a ordem das categorias. Tente de novo."
+        move_up: Mover para cima
+        move_down: Mover para baixo
+        rename_button: Renomear categoria
+        rename_code_placeholder: codigo_da_categoria
+        rename_name_placeholder: Nome exibido
+        rename_save_button: Salvar
+        rename_cancel_button: Cancelar
+        rename_empty_error: "O código da categoria não pode ficar vazio."
+        rename_error: "Não foi possível renomear."
+        anim_lib: "Prévias animadas renderizadas pelo <strong>lottie-web</strong> <detail>(renderer canvas)</detail>"
+
+  forum:
+    composer:
+      sticker_tooltip: Inserir sticker
+    picker:
+      no_stickers: Nenhum sticker encontrado

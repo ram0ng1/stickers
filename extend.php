@@ -1,48 +1,61 @@
 <?php
 
+/*
+ * This file is part of ramon/stickers.
+ *
+ * Copyright (c) 2026 Ramon Guilherme.
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 namespace Ramon\Stickers;
 
 use Flarum\Extend;
+use Ramon\Stickers\Api\Controller;
 use Ramon\Stickers\Api\Resource\StickerResource;
-use Ramon\Stickers\Api\Controller\BulkDeleteStickersController;
-use Ramon\Stickers\Api\Controller\ExportStickersController;
-use Ramon\Stickers\Api\Controller\ImportStickersController;
-use Ramon\Stickers\Api\Controller\RenameCategoryController;
-use Ramon\Stickers\Api\Controller\SaveCategoryOrderController;
-use Ramon\Stickers\Api\Controller\UploadStickerController;
 use Ramon\Stickers\Api\UploadThrottler;
 
 return [
     (new Extend\Frontend('forum'))
         ->css(__DIR__.'/less/forum.less')
-        ->js(__DIR__.'/js/dist/forum.js'),
+        ->js(__DIR__.'/js/dist/forum.js')
+        ->jsDirectory(__DIR__.'/js/dist/forum'),
+
+    (new Extend\Frontend('common'))
+        ->jsDirectory(__DIR__.'/js/dist/common'),
 
     (new Extend\Frontend('admin'))
         ->css(__DIR__.'/less/admin.less')
-        ->js(__DIR__.'/js/dist/admin.js'),
+        ->js(__DIR__.'/js/dist/admin.js')
+        ->jsDirectory(__DIR__.'/js/dist/admin'),
 
     new Extend\Locales(__DIR__.'/locale'),
 
-    // Serialize settings to the forum frontend
-    (new Extend\Settings)
-        ->serializeToForum('ramonStickersHoverPlay',       'ramon-stickers.hover-play',       'boolval', false)
-        ->serializeToForum('ramonStickersShowTooltip',     'ramon-stickers.show-tooltip',     'boolval', true)
-        ->serializeToForum('ramonStickersCategoryOrder',   'ramon-stickers.category-order',   null,      '[]'),
+    (new Extend\Settings())
+        ->default('ramon-stickers.hover-play', false)
+        ->default('ramon-stickers.show-tooltip', true)
+        ->default('ramon-stickers.category-order', '[]')
+        ->serializeToForum('ramonStickersHoverPlay', 'ramon-stickers.hover-play', 'boolval')
+        ->serializeToForum('ramonStickersShowTooltip', 'ramon-stickers.show-tooltip', 'boolval')
+        ->serializeToForum('ramonStickersCategoryOrder', 'ramon-stickers.category-order'),
 
-    (new Extend\Formatter)
+    (new Extend\Formatter())
         ->configure(ConfigureTextFormatter::class),
 
     new Extend\ApiResource(StickerResource::class),
 
     (new Extend\Routes('api'))
-        ->post('/stickers/import',           'stickers.import',           ImportStickersController::class)
-        ->post('/stickers/upload',           'stickers.upload',           UploadStickerController::class)
-        ->post('/stickers/export',           'stickers.export',           ExportStickersController::class)
-        ->post('/stickers/rename-category',  'stickers.renameCategory',   RenameCategoryController::class)
-        ->post('/stickers/category-order',   'stickers.categoryOrder',    SaveCategoryOrderController::class)
-        ->post('/stickers/bulk-delete',      'stickers.bulkDelete',       BulkDeleteStickersController::class),
+        ->post('/stickers/import', 'stickers.import', Controller\ImportStickersController::class)
+        ->post('/stickers/upload', 'stickers.upload', Controller\UploadStickerController::class)
+        ->post('/stickers/export', 'stickers.export', Controller\ExportStickersController::class)
+        ->post('/stickers/rename-category', 'stickers.renameCategory', Controller\RenameCategoryController::class)
+        ->post('/stickers/category-order', 'stickers.categoryOrder', Controller\SaveCategoryOrderController::class)
+        ->post('/stickers/bulk-delete', 'stickers.bulkDelete', Controller\BulkDeleteStickersController::class),
 
-    // CLAUDE.md §R-2 — per-actor rate limit on the heavy upload/import routes.
+    (new Extend\ServiceProvider())
+        ->register(StickersServiceProvider::class),
+
     (new Extend\ThrottleApi())
         ->set('ramonStickersUploadThrottle', UploadThrottler::class),
 ];

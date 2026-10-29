@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * This file is part of ramon/stickers.
+ *
+ * Copyright (c) 2026 Ramon Guilherme.
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 namespace Ramon\Stickers\Api;
 
 use Flarum\Http\RequestUtil;
@@ -7,49 +16,46 @@ use Illuminate\Contracts\Cache\Repository;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * Per-actor rate limit for the sticker upload/import routes.
+ * Limite por ator nas rotas de upload e importação.
  *
- * CLAUDE.md §18 / §R-2: even though these routes are admin-only, an admin doing a
- * malicious or accidental large import can degrade the server. This caps the
- * number of upload/import requests per actor per minute.
- *
- * Return semantics (per Flarum's ThrottleApi):
- *   - `false`  → bypass ALL throttlers (NEVER return this — see §17)
- *   - `true`   → throttle (limit hit, request rejected with 429)
- *   - `null`   → abstain (let other throttlers decide)
- *   - integer  → seconds remaining until reset
+ * Mesmo só para admin: uma importação grande (por engano ou não) pesa no
+ * servidor. Retornos do ThrottleApi: `true` bloqueia (429), `null` deixa os
+ * outros throttlers decidirem. Nunca `false`, que libera todos eles.
  */
 class UploadThrottler
 {
-    public const LIMIT  = 30;     // requests per window
-    public const WINDOW = 60;     // window length in seconds
+    public const LIMIT = 30;  // requisições por janela
+    public const WINDOW = 60; // segundos
+
+    public const ROUTES = ['stickers.upload', 'stickers.import'];
 
     public function __construct(
         protected Repository $cache
-    ) {}
+    ) {
+    }
 
-    public function __invoke(ServerRequestInterface $request)
+    public function __invoke(ServerRequestInterface $request): ?bool
     {
-        $path = $request->getUri()->getPath();
-        if (! preg_match('#^/api/stickers/(upload|import)$#', $path)) {
-            return null;   // not our route — abstain
+        // Pelo nome da rota: dentro da pilha da API o caminho da URL não traz o
+        // prefixo /api, e o Flarum pode estar numa subpasta.
+        if (! in_array($request->getAttribute('routeName'), self::ROUTES, true)) {
+            return null;
         }
 
         $actor = RequestUtil::getActor($request);
-        // Per-actor bucket: keyed by user id, or by IP for guests (defensive only —
-        // these endpoints already require admin so guests should never reach here).
         $bucket = $actor->isGuest()
-            ? 'guest.' . ($request->getServerParams()['REMOTE_ADDR'] ?? 'unknown')
-            : 'user.' . (int) $actor->id;
+            ? 'guest.'.($request->getServerParams()['REMOTE_ADDR'] ?? 'unknown')
+            : 'user.'.(int) $actor->id;
 
-        $key   = 'ramon-stickers.throttle.' . $bucket;
+        $key = 'ramon-stickers.throttle.'.$bucket;
         $count = (int) $this->cache->get($key, 0);
 
         if ($count >= self::LIMIT) {
-            return true;   // hit — return 429
+            return true;
         }
 
         $this->cache->put($key, $count + 1, self::WINDOW);
-        return null;       // not throttled here, but let other throttlers run
+
+        return null;
     }
 }
