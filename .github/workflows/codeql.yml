@@ -1,24 +1,23 @@
 name: CodeQL
 
-# CLAUDE.md §35.13/I2 — CodeQL with security-extended for JS/TS.
-# Note: CodeQL does NOT support PHP (it never has). PHP backend code is covered by
-# the lint matrix in ci.yml; for deeper PHP analysis, add Semgrep or PHPStan + Psalm
-# in a separate workflow.
+# 🟠 I2 — Análise estática para JS/TS (XSS, prototype pollution, path traversal,
+# command injection). PHP NÃO é suportado pelo CodeQL; para backend use
+# Semgrep (regras p/php + p/security-audit) ou PHPStan (já configurado em ci.yml).
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
   schedule:
-    # Weekly Monday morning UTC — catches new query packs released since last commit.
+    # Semanalmente, segunda-feira 06:00 UTC.
     - cron: '0 6 * * 1'
-  workflow_dispatch:
 
+# 🔴 C1 — Default-deny.
 permissions: {}
 
 concurrency:
-  group: codeql-${{ github.ref }}
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,28 +26,38 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write     # required to upload SARIF results
-      actions: read              # required for private repos
+      security-events: write
+      actions: read
+    # Desliga a otimização "diff-informed queries" do CodeQL.
+    # Em v3.27/3.28 ela falha quando o `pr-diff-range.yml` recebe paths/linhas
+    # como "undefined" (PRs sem base compartilhada, fetch raso, primeiro commit
+    # da branch). Mantemos `false` aqui até promover para uma versão que cubra
+    # esse caso de borda sem erro fatal.
+    env:
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'
     strategy:
       fail-fast: false
       matrix:
-        language: ['javascript-typescript']
+        language: [javascript-typescript]
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Histórico suficiente para o CodeQL diferenciar base vs head em PRs.
+          fetch-depth: 0
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           languages: ${{ matrix.language }}
           queries: security-extended
 
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+      - name: Análise CodeQL
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           category: '/language:${{ matrix.language }}'

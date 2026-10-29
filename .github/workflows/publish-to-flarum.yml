@@ -1,4 +1,4 @@
-name: Publish Release to Flarum
+name: Publicar Release no Flarum
 
 on:
   release:
@@ -6,53 +6,48 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag (e.g. v2.0.6)'
+        description: 'Tag da release (ex: v2.1.19-beta)'
         required: true
       release_body:
-        description: 'Release body / description'
+        description: 'Corpo/descrição da release'
         required: false
         default: ''
       release_url:
-        description: 'GitHub release URL'
+        description: 'URL da release no GitHub'
         required: false
         default: ''
 
-# CLAUDE.md §35.13/C1 — default-deny (this workflow only calls an external API).
+# §35.13 C1 — default-deny do GITHUB_TOKEN. Esse workflow só chama API externa.
 permissions: {}
 
-# CLAUDE.md §35.13/I4 — never run two forum-publish jobs in parallel.
 concurrency:
   group: publish-flarum-${{ github.event.release.tag_name || inputs.release_tag }}
   cancel-in-progress: false
 
 jobs:
   publish_to_flarum:
-    name: Post to Forum
+    name: Publicar no Fórum
     runs-on: ubuntu-latest
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+      # §35.13 I3 — auditar egress. Esse job toca em FLARUM_API_KEY,
+      # então harden-runner é especialmente importante aqui.
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
         with:
           egress-policy: audit
-          # CLAUDE.md §35.13/I3 — this job ships secrets to a single external API.
-          # Allowlist that exact host so a compromised action can't exfiltrate elsewhere.
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
-            ramonguilherme.com.br:443
 
-      - name: Validate FLARUM_DISCUSSION_ID
+      - name: Validar FLARUM_DISCUSSION_ID
         env:
           FLARUM_DISCUSSION_ID: ${{ vars.FLARUM_DISCUSSION_ID }}
         run: |
           if [ -z "$FLARUM_DISCUSSION_ID" ]; then
-            echo "Error: FLARUM_DISCUSSION_ID is not configured in the repository variables."
-            echo "Configure it under: Settings > Secrets and variables > Actions > Variables"
+            echo "❌ Erro: FLARUM_DISCUSSION_ID não está configurado nas variáveis do repositório."
+            echo "Configure em: Settings > Secrets and variables > Actions > Variables"
             exit 1
           fi
-          echo "FLARUM_DISCUSSION_ID is configured: $FLARUM_DISCUSSION_ID"
+          echo "✅ FLARUM_DISCUSSION_ID configurado: $FLARUM_DISCUSSION_ID"
 
-      - name: Post release comment to Flarum
+      - name: Postar comentário de release no Flarum
         env:
           FLARUM_API_KEY: ${{ secrets.FLARUM_API_KEY }}
           FLARUM_DISCUSSION_ID: ${{ vars.FLARUM_DISCUSSION_ID }}
@@ -60,10 +55,10 @@ jobs:
           RELEASE_BODY: ${{ github.event.release.body || inputs.release_body }}
           RELEASE_URL: ${{ github.event.release.html_url || inputs.release_url }}
         run: |
-          # Extract version from tag (remove leading 'v' if present)
           VERSION="${RELEASE_TAG#v}"
+          # Só o pt-BR: as notas em inglês (depois do marcador) são para o discuss.
+          RELEASE_BODY="${RELEASE_BODY%%<!-- en -->*}"
 
-          # Build the JSON payload using jq to safely handle all special characters
           PAYLOAD=$(jq -n \
             --arg tag "$RELEASE_TAG" \
             --arg body "$RELEASE_BODY" \
@@ -74,7 +69,7 @@ jobs:
               "data": {
                 "type": "posts",
                 "attributes": {
-                  "content": ("## " + $tag + "\n\n" + $body + "\n\n**Installation:**\n```\ncomposer require ramon/stickers:" + $version + "\n```\n\n[See release on GitHub](" + $url + ")")
+                  "content": ("## 🚀 " + $tag + "\n\n" + $body + "\n\n**Instalação:**\n```\ncomposer require ramon/stickers:" + $version + "\n```\n\n[Ver release no GitHub](" + $url + ")")
                 },
                 "relationships": {
                   "discussion": {
@@ -99,10 +94,10 @@ jobs:
           echo "HTTP Status: $HTTP_STATUS"
 
           if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
-            echo "Comment published successfully on Flarum."
+            echo "✅ Comentário publicado com sucesso no Flarum!"
             echo "Post ID: $(jq -r '.data.id // empty' /tmp/flarum_response.json)"
           else
-            echo "Failed to publish comment on Flarum (HTTP $HTTP_STATUS)"
+            echo "❌ Falha ao publicar comentário no Flarum (HTTP $HTTP_STATUS)"
             echo "Response body:"
             jq '.' /tmp/flarum_response.json
             exit 1
