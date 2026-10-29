@@ -4,3 +4,6 @@ js/dist/
 js/node_modules/
 vendor/
 *.min.js
+# Utilitários da pipeline (router/seed da bancada de CI), fora do SAST
+# de produto; rodam só em loopback no runner e já têm guardas próprias.
+.github/scripts/
