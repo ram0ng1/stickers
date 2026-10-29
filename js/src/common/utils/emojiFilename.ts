@@ -10,8 +10,8 @@ import { replace as replaceEmoji } from 'node-emoji';
  *   "sticker_😂"    → "sticker_joy"
  *   "cool😎"        → "cool_sunglasses"
  */
-export function emojiToSlug(raw) {
-  const replaced = replaceEmoji(raw, (emoji) => '_' + emoji.key + '_');
+export function emojiToSlug(raw: string): string {
+  const replaced = replaceEmoji(raw, (emoji: { key: string }) => '_' + emoji.key + '_');
 
   return replaced.replace(/_+/g, '_').replace(/^_|_$/g, '').toLowerCase();
 }
@@ -24,7 +24,7 @@ export function emojiToSlug(raw) {
  *   "😀_happy.tgs"  → "Grinning Happy"
  *   "party🎉time"   → "Party Tada Time"
  */
-export function emojiToTitle(filename) {
+export function emojiToTitle(filename: string): string {
   const base = filename.replace(/\.[^.]+$/, '');
 
   const slug = emojiToSlug(base);
@@ -37,7 +37,7 @@ export function emojiToTitle(filename) {
  * caracteres fora de `[a-z0-9_-]` viram `_`, como exige o servidor: um código
  * como `:meu sticker:` seria recusado na criação, depois do arquivo enviado.
  */
-export function emojiToCode(filename) {
+export function emojiToCode(filename: string): string {
   const slug = emojiToSlug(filename.replace(/\.[^.]+$/, ''))
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')

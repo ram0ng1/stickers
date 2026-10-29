@@ -72,7 +72,7 @@
                 "jsCommon": true,
                 "css": true,
                 "locale": true,
-                "typescript": false,
+                "typescript": true,
                 "backendTesting": true
             }
         }

@@ -3,17 +3,13 @@
  *
  * Um container vazio esconderia a falha. O `title` leva a URL e o motivo,
  * para dar para diagnosticar.
- *
- * @param {HTMLElement} container
- * @param {string}      url
- * @param {string}      [reason]
  */
-export function renderAnimFallback(container, url, reason) {
+export function renderAnimFallback(container: HTMLElement | null, url: string, reason?: string): void {
   if (!container) return;
 
   container.querySelectorAll('canvas').forEach((c) => c.remove());
 
-  let fallback = container.querySelector('.StickerAnim-fallback');
+  let fallback = container.querySelector<HTMLElement>('.StickerAnim-fallback');
   if (!fallback) {
     fallback = document.createElement('span');
     fallback.className = 'StickerAnim-fallback';

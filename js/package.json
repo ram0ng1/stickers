@@ -11,9 +11,12 @@
   },
   "devDependencies": {
     "@flarum/prettier-config": "^1.0.0",
+    "@types/file-saver": "^2.0.7",
     "cross-env": "^10.1.0",
+    "flarum-tsconfig": "^2.0.0",
     "flarum-webpack-config": "^3.1.0",
     "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
     "webpack": "^5.112.2",
     "webpack-cli": "^7.2.3"
   },
@@ -22,7 +25,8 @@
     "build": "webpack --mode production",
     "analyze": "cross-env ANALYZER=true npm run build",
     "format": "prettier --write src",
-    "format-check": "prettier --check src"
+    "format-check": "prettier --check src",
+    "check-typings": "tsc --noEmit --emitDeclarationOnly false"
   },
   "prettier": "@flarum/prettier-config"
 }

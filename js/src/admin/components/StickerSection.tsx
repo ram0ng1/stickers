@@ -10,29 +10,54 @@ import listItems from 'flarum/common/helpers/listItems';
 import saveSettings from 'flarum/admin/utils/saveSettings';
 import StickerList from './StickerList';
 import { sanitizeCategoryCode } from '../../common/utils/stickerPath';
-import uploadStickerFile from '../utils/uploadStickerFile';
+import uploadStickerFile, { UploadError } from '../utils/uploadStickerFile';
+
+import type Mithril from 'mithril';
 
 // Espera entre tentativas quando o limite de envios (UploadThrottler) responde 429.
 const THROTTLE_RETRY_MS = 5000;
 const THROTTLE_MAX_RETRIES = 15;
 
+interface ImportState {
+  active: boolean;
+  imported: number;
+  skipped: number;
+  total: number;
+  error: string | null;
+}
+
+interface UploadState {
+  active: boolean;
+  current: number;
+  total: number;
+  errors: number;
+}
+
+interface ImportResponse {
+  imported: number;
+  skipped: number;
+  total: number;
+}
+
+type SwitchProp = 'hoverPlayEnabled' | 'showTooltipEnabled';
+type SavingProp = 'savingHoverPlay' | 'savingShowTooltip';
+
 export default class StickerSection extends Component {
-  oninit(vnode) {
+  hoverPlayEnabled = false;
+  showTooltipEnabled = true;
+  savingHoverPlay = false;
+  savingShowTooltip = false;
+  exporting = false;
+  importState: ImportState | null = null;
+  uploadState: UploadState | null = null;
+  deletingSelected = false;
+
+  oninit(vnode: Mithril.Vnode<any, this>) {
     super.oninit(vnode);
-    this.hoverPlayEnabled = ['1', true].includes(app.data.settings['ramon-stickers.hover-play']);
-    this.showTooltipEnabled = !['0', false].includes(app.data.settings['ramon-stickers.show-tooltip']);
-    this.savingHoverPlay = false;
-    this.savingShowTooltip = false;
 
-    this.exporting = false;
-
-    // { active, imported, skipped, total, error }
-    this.importState = null;
-
-    // { active, current, total, errors }
-    this.uploadState = null;
-
-    this.deletingSelected = false;
+    const settings = app.data.settings as Record<string, unknown>;
+    this.hoverPlayEnabled = ['1', true].includes(settings['ramon-stickers.hover-play'] as string | boolean);
+    this.showTooltipEnabled = !['0', false].includes(settings['ramon-stickers.show-tooltip'] as string | boolean);
   }
 
   exportStickerList() {
@@ -73,8 +98,8 @@ export default class StickerSection extends Component {
     input.type = 'file';
     input.accept = '.zip,.json';
 
-    input.onchange = (e) => {
-      const file = e.target.files[0];
+    input.onchange = () => {
+      const file = input.files?.[0];
       if (!file) return;
 
       if (file.name.toLowerCase().endsWith('.zip')) {
@@ -87,7 +112,7 @@ export default class StickerSection extends Component {
     input.click();
   }
 
-  importZip(file) {
+  importZip(file: File) {
     if (!confirm(app.translator.trans('ramon-stickers.admin.sticker_section.import_zip_message', {}, true))) return;
 
     this.importState = { active: true, imported: 0, skipped: 0, total: 0, error: null };
@@ -161,7 +186,7 @@ export default class StickerSection extends Component {
     xhr.send(formData);
   }
 
-  importLegacyJson(file) {
+  importLegacyJson(file: File) {
     if (!confirm(app.translator.trans('ramon-stickers.admin.sticker_section.import_stickers_message', {}, true))) return;
 
     this.importState = { active: true, imported: 0, skipped: 0, total: 0, error: null };
@@ -171,18 +196,18 @@ export default class StickerSection extends Component {
     const reader = new FileReader();
     reader.readAsText(file, 'UTF-8');
 
-    reader.onload = (readerEvent) => {
+    reader.onload = () => {
       // JSON quebrado para aqui; a exceção solta deixaria o spinner girando para sempre.
-      let parsed;
+      let parsed: unknown;
       try {
-        parsed = JSON.parse(readerEvent.target.result);
+        parsed = JSON.parse(reader.result as string);
       } catch (e) {
         this.importState = {
           active: false,
           imported: 0,
           skipped: 0,
           total: 0,
-          error: app.translator.trans('ramon-stickers.admin.sticker_section.import_invalid_json', { error: e.message }, true),
+          error: app.translator.trans('ramon-stickers.admin.sticker_section.import_invalid_json', { error: (e as Error).message }, true),
         };
         app.stickerListState.loading = false;
         m.redraw();
@@ -190,12 +215,12 @@ export default class StickerSection extends Component {
       }
 
       app
-        .request({
+        .request<ImportResponse>({
           method: 'POST',
           url: `${app.forum.attribute('apiUrl')}/stickers/import`,
           body: { data: parsed },
           // O erro aparece no aviso da seção, não num alerta a mais.
-          errorHandler: (error) => {
+          errorHandler: (error: unknown) => {
             throw error;
           },
         })
@@ -211,7 +236,7 @@ export default class StickerSection extends Component {
             m.redraw();
           }, 6000);
         })
-        .catch((err) => {
+        .catch((err: { message?: string; response?: { error?: string; errors?: { detail?: string }[] } }) => {
           const error = err?.response?.error || err?.response?.errors?.[0]?.detail || err?.message || String(err);
           this.importState = { active: false, imported: 0, skipped: 0, total: 0, error };
           app.stickerListState.loading = false;
@@ -233,8 +258,8 @@ export default class StickerSection extends Component {
     input.multiple = true;
     input.accept = '.json,.tgs,.png,.gif,.webp,.jpg,.jpeg,.apng';
 
-    input.onchange = (e) => {
-      const files = Array.from(e.target.files);
+    input.onchange = () => {
+      const files = Array.from(input.files || []);
       if (!files.length) return;
 
       this.uploadState = { active: true, current: 0, total: files.length, errors: 0 };
@@ -246,9 +271,9 @@ export default class StickerSection extends Component {
     input.click();
   }
 
-  _uploadNext(files, category, categoryName, index) {
+  _uploadNext(files: File[], category: string, categoryName: string, index: number): void {
     if (index >= files.length) {
-      const { errors, total } = this.uploadState;
+      const { errors, total } = this.uploadState!;
       this.uploadState = { active: false, current: total, total, errors };
       app.stickerListState.loadResults();
       m.redraw();
@@ -262,7 +287,7 @@ export default class StickerSection extends Component {
     const file = files[index];
 
     this._uploadWithRetry(file, 0)
-      .then((path) =>
+      .then((path: string) =>
         app.store.createRecord('stickers').save({
           title: emojiToTitle(file.name),
           textToReplace: emojiToCode(file.name),
@@ -271,12 +296,12 @@ export default class StickerSection extends Component {
           categoryName,
         })
       )
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.warn('[Stickers] Bulk upload error for', file.name, err);
-        this.uploadState.errors++;
+        this.uploadState!.errors++;
       })
       .finally(() => {
-        this.uploadState.current = index + 1;
+        this.uploadState!.current = index + 1;
         m.redraw();
         this._uploadNext(files, category, categoryName, index + 1);
       });
@@ -286,8 +311,8 @@ export default class StickerSection extends Component {
    * Envio de um arquivo do lote. O limite é de 30 envios por minuto: no 429
    * espera e tenta de novo, para um lote grande não falhar do 31º em diante.
    */
-  _uploadWithRetry(file, attempt) {
-    return uploadStickerFile(file).catch((err) => {
+  _uploadWithRetry(file: File, attempt: number): Promise<string> {
+    return uploadStickerFile(file).catch((err: UploadError) => {
       if (err.status !== 429 || attempt >= THROTTLE_MAX_RETRIES) throw err;
 
       return new Promise((resolve) => setTimeout(resolve, THROTTLE_RETRY_MS)).then(() => this._uploadWithRetry(file, attempt + 1));
@@ -335,11 +360,11 @@ export default class StickerSection extends Component {
       });
   }
 
-  setHoverPlay(value) {
+  setHoverPlay(value: boolean) {
     this.saveSwitch('ramon-stickers.hover-play', value, 'hoverPlayEnabled', 'savingHoverPlay');
   }
 
-  setShowTooltip(value) {
+  setShowTooltip(value: boolean) {
     this.saveSwitch('ramon-stickers.show-tooltip', value, 'showTooltipEnabled', 'savingShowTooltip');
   }
 
@@ -347,7 +372,7 @@ export default class StickerSection extends Component {
    * O saveSettings() atualiza o app.data.settings, que o oninit lê ao voltar
    * para a página. Se o save falhar, a chave volta.
    */
-  saveSwitch(key, value, stateProp, savingProp) {
+  saveSwitch(key: string, value: boolean, stateProp: SwitchProp, savingProp: SavingProp) {
     const previous = this[stateProp];
     this[stateProp] = value;
     this[savingProp] = true;
@@ -530,14 +555,14 @@ export default class StickerSection extends Component {
         <div className="StickerSection-settingsBar">
           <div className="container">
             <label className="StickerSection-settingRow">
-              <Switch state={this.hoverPlayEnabled} loading={this.savingHoverPlay} onchange={(val) => this.setHoverPlay(val)} />
+              <Switch state={this.hoverPlayEnabled} loading={this.savingHoverPlay} onchange={(val: boolean) => this.setHoverPlay(val)} />
               <span className="StickerSection-settingLabel">
                 <strong>{app.translator.trans('ramon-stickers.admin.settings.hover_play_label')}</strong>
                 <span className="helpText">{app.translator.trans('ramon-stickers.admin.settings.hover_play_help')}</span>
               </span>
             </label>
             <label className="StickerSection-settingRow">
-              <Switch state={this.showTooltipEnabled} loading={this.savingShowTooltip} onchange={(val) => this.setShowTooltip(val)} />
+              <Switch state={this.showTooltipEnabled} loading={this.savingShowTooltip} onchange={(val: boolean) => this.setShowTooltip(val)} />
               <span className="StickerSection-settingLabel">
                 <strong>{app.translator.trans('ramon-stickers.admin.settings.show_tooltip_label')}</strong>
                 <span className="helpText">{app.translator.trans('ramon-stickers.admin.settings.show_tooltip_help')}</span>

@@ -1,22 +1,22 @@
 import app from 'flarum/admin/app';
+import type Sticker from '../../common/models/Sticker';
+import type { ApiQueryParamsPlural, ApiResponsePlural } from 'flarum/common/Store';
 
 export default class StickerListState {
-  constructor() {
-    this.stickers = [];
-    this.moreResults = false;
-    this.loading = false;
+  stickers: Sticker[] = [];
+  moreResults = false;
+  loading = false;
 
-    // Posição no servidor, separada do tamanho da lista: adicionar ou apagar
-    // localmente muda `stickers.length`, e usá-lo como offset faria o
-    // "Carregar mais" pular ou repetir itens.
-    this.offset = 0;
-    this.requestId = 0;
+  // Posição no servidor, separada do tamanho da lista: adicionar ou apagar
+  // localmente muda `stickers.length`, e usá-lo como offset faria o
+  // "Carregar mais" pular ou repetir itens.
+  offset = 0;
+  requestId = 0;
 
-    this.selectionMode = false;
-    this.selectedIds = new Set();
-  }
+  selectionMode = false;
+  selectedIds = new Set<string>();
 
-  loadResults(offset = 0) {
+  loadResults(offset = 0): Promise<ApiResponsePlural<Sticker>> {
     if (offset === 0) {
       // Recomeça do zero: voltar à página nunca duplica a lista.
       this.stickers = [];
@@ -29,7 +29,7 @@ export default class StickerListState {
     // "Carregar mais" duplicaria a página.
     const requestId = ++this.requestId;
 
-    return app.store.find('stickers', { page: { limit: 24, offset } }).then((results) => {
+    return app.store.find<Sticker[]>('stickers', { page: { limit: 24, offset } } as ApiQueryParamsPlural).then((results) => {
       if (requestId !== this.requestId) return results;
       return this.parseResults(results);
     });
@@ -39,7 +39,7 @@ export default class StickerListState {
     this.loadResults(this.offset);
   }
 
-  parseResults(results) {
+  parseResults(results: ApiResponsePlural<Sticker>) {
     const known = new Set(this.stickers.map((s) => s.id()));
     this.stickers.push(...results.filter((s) => !known.has(s.id())));
     this.offset += results.length;
@@ -49,14 +49,14 @@ export default class StickerListState {
     return results;
   }
 
-  addToList(sticker) {
+  addToList(sticker: Sticker) {
     // O novo vai para o fim da ordem do servidor (id): o offset não muda, e o
     // filtro de duplicados do parseResults cobre quando a paginação chegar nele.
     this.stickers.unshift(sticker);
     m.redraw();
   }
 
-  removeFromList(stickerId) {
+  removeFromList(stickerId: string) {
     const index = this.stickers.findIndex((s) => stickerId === s.id());
     if (index !== -1) {
       this.stickers.splice(index, 1);
@@ -87,7 +87,7 @@ export default class StickerListState {
     m.redraw();
   }
 
-  toggleSelect(id) {
+  toggleSelect(id: string) {
     if (this.selectedIds.has(id)) {
       this.selectedIds.delete(id);
     } else {
@@ -96,7 +96,7 @@ export default class StickerListState {
     m.redraw();
   }
 
-  isSelected(id) {
+  isSelected(id: string) {
     return this.selectedIds.has(id);
   }
 

@@ -1,9 +1,9 @@
 name: Frontend (Flarum)
 
 # O workflow de frontend do core, o mesmo da FoF (flarum/framework
-# REUSABLE_frontend.yml): Prettier e build de produção (o frontend é JS, sem
-# checagem de tipos). Em push no main, commita o js/dist gerado, então o bundle
-# publicado sempre corresponde ao código-fonte.
+# REUSABLE_frontend.yml): Prettier, TypeScript e build de produção. Em push no
+# main, commita o js/dist gerado, então o bundle publicado sempre corresponde
+# ao código-fonte.
 on: [workflow_dispatch, push, pull_request]
 
 permissions:
@@ -20,7 +20,7 @@ jobs:
     with:
       enable_bundlewatch: false
       enable_prettier: true
-      enable_typescript: false
+      enable_typescript: true
       enable_tests: false
       # Sem typings publicados nem medição de cobertura de tipos.
       build_typings_script: ''

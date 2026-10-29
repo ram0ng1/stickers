@@ -1,7 +1,7 @@
 import app from 'flarum/admin/app';
 import Alert from 'flarum/common/components/Alert';
 import Button from 'flarum/common/components/Button';
-import Modal from 'flarum/common/components/Modal';
+import Modal, { IInternalModalAttrs } from 'flarum/common/components/Modal';
 import ItemList from 'flarum/common/utils/ItemList';
 import Stream from 'flarum/common/utils/Stream';
 import urlChecker from '../../common/utils/urlChecker';
@@ -10,23 +10,42 @@ import { renderTgs } from '../../common/utils/renderTgs';
 import { emojiToCode, emojiToTitle } from '../../common/utils/emojiFilename';
 import { isLottiePath, isTgsPath, isAnimatedPath, sanitizeCategoryCode } from '../../common/utils/stickerPath';
 import uploadStickerFile from '../utils/uploadStickerFile';
+import type Sticker from '../../common/models/Sticker';
+
+import type Mithril from 'mithril';
+
+export interface EditStickerModalAttrs extends IInternalModalAttrs {
+  model?: Sticker;
+}
+
+interface RequestErrorLike {
+  message?: string;
+  response?: { errors?: { title?: string; detail?: string }[] };
+}
 
 /**
  * Modal de criar/editar sticker: imagens (PNG, GIF, WebP, JPEG), Lottie JSON e TGS.
  */
-export default class EditStickerModal extends Modal {
-  oninit(vnode) {
+export default class EditStickerModal extends Modal<EditStickerModalAttrs> {
+  sticker!: Sticker;
+  category!: Stream<string>;
+  categoryName!: Stream<string>;
+  stickerTitle!: Stream<string>;
+  textToReplace!: Stream<string>;
+  path!: Stream<string>;
+  uploading = false;
+  uploadError: string | null = null;
+  deleting = false;
+
+  oninit(vnode: Mithril.Vnode<EditStickerModalAttrs, this>) {
     super.oninit(vnode);
 
-    this.sticker = this.attrs.model || app.store.createRecord('stickers');
+    this.sticker = this.attrs.model || app.store.createRecord<Sticker>('stickers');
     this.category = Stream(this.sticker.category() || '');
     this.categoryName = Stream(this.sticker.categoryName() || '');
     this.stickerTitle = Stream(this.sticker.title() || '');
     this.textToReplace = Stream(this.sticker.textToReplace() || '');
     this.path = Stream(this.sticker.path() || '');
-    this.uploading = false;
-    this.uploadError = null;
-    this.deleting = false;
   }
 
   className() {
@@ -108,14 +127,14 @@ export default class EditStickerModal extends Modal {
               {isLottiePath(this.path()) ? (
                 <div
                   className="StickerUpload-animPreview"
-                  oncreate={(vnode) => this.initAnimPreview(vnode.dom)}
-                  onupdate={(vnode) => this.initAnimPreview(vnode.dom)}
+                  oncreate={(vnode) => this.initAnimPreview(vnode.dom as HTMLElement)}
+                  onupdate={(vnode) => this.initAnimPreview(vnode.dom as HTMLElement)}
                 />
               ) : isTgsPath(this.path()) ? (
                 <div
                   className="StickerUpload-animPreview"
-                  oncreate={(vnode) => this.initAnimPreview(vnode.dom)}
-                  onupdate={(vnode) => this.initAnimPreview(vnode.dom)}
+                  oncreate={(vnode) => this.initAnimPreview(vnode.dom as HTMLElement)}
+                  onupdate={(vnode) => this.initAnimPreview(vnode.dom as HTMLElement)}
                 />
               ) : (
                 <img
@@ -189,7 +208,7 @@ export default class EditStickerModal extends Modal {
   /**
    * Prévia animada do modal; aqui toca sozinha, para ver a animação inteira.
    */
-  initAnimPreview(container) {
+  initAnimPreview(container: HTMLElement) {
     const path = this.path();
     if (!path) return;
 
@@ -210,8 +229,8 @@ export default class EditStickerModal extends Modal {
     input.type = 'file';
     input.accept = '.json,.tgs,.png,.gif,.webp,.jpg,.jpeg,.apng';
 
-    input.onchange = (e) => {
-      const file = e.target.files[0];
+    input.onchange = () => {
+      const file = input.files?.[0];
       if (!file) return;
 
       this.uploading = true;
@@ -231,7 +250,7 @@ export default class EditStickerModal extends Modal {
             this.textToReplace(emojiToCode(file.name));
           }
         })
-        .catch((err) => {
+        .catch((err: Error) => {
           this.uploadError = app.translator.trans('ramon-stickers.admin.upload.failed_with_error', { error: err.message }, true);
         })
         .finally(() => {
@@ -253,7 +272,7 @@ export default class EditStickerModal extends Modal {
     };
   }
 
-  onsubmit(e) {
+  onsubmit(e: SubmitEvent) {
     e.preventDefault();
     this.loading = true;
     m.redraw();
@@ -263,17 +282,17 @@ export default class EditStickerModal extends Modal {
     this.sticker
       // O erro sai no alerta do próprio modal; o errorHandler evita um segundo alerta.
       .save(this.submitData(), {
-        errorHandler: (error) => {
+        errorHandler: (error: unknown) => {
           throw error;
         },
       })
-      .then((sticker) => {
+      .then((sticker: Sticker) => {
         this.hide();
         if (!exists) app.stickerListState.addToList(sticker);
         this.loading = false;
         this.showSuccessMessage();
       })
-      .catch((err) => {
+      .catch((err: RequestErrorLike) => {
         this.loading = false;
         m.redraw();
         console.error('[Stickers] Save failed:', err);
@@ -285,7 +304,7 @@ export default class EditStickerModal extends Modal {
   delete() {
     if (!confirm(app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.delete_sticker_confirmation', {}, true))) return;
 
-    const id = this.sticker.id();
+    const id = this.sticker.id() as string;
     this.deleting = true;
     m.redraw();
 
@@ -293,7 +312,7 @@ export default class EditStickerModal extends Modal {
       .delete(
         {},
         {
-          errorHandler: (error) => {
+          errorHandler: (error: unknown) => {
             throw error;
           },
         }
@@ -303,7 +322,7 @@ export default class EditStickerModal extends Modal {
         app.stickerListState.removeFromList(id);
         app.alerts.show(Alert, { type: 'success' }, app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.deleted_message'));
       })
-      .catch((err) => {
+      .catch((err: RequestErrorLike) => {
         console.error('[Stickers] Delete failed:', err);
         this.showErrorMessage(this.extractErrorMessage(err));
       })
@@ -317,14 +336,14 @@ export default class EditStickerModal extends Modal {
     return app.alerts.show(Alert, { type: 'success' }, app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.saved_message'));
   }
 
-  showErrorMessage(message) {
+  showErrorMessage(message: Mithril.Children) {
     return app.alerts.show(Alert, { type: 'error' }, message);
   }
 
   /**
    * A mensagem mais útil do erro (o Flarum manda JSON:API com `errors[0].detail`).
    */
-  extractErrorMessage(err) {
+  extractErrorMessage(err: RequestErrorLike | null): Mithril.Children {
     const fallback = app.translator.trans('ramon-stickers.admin.sticker_section.edit_sticker.save_error') || 'Save failed.';
     if (!err) return fallback;
 

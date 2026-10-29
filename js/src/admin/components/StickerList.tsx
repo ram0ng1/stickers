@@ -9,6 +9,15 @@ import { renderLottie } from '../../common/utils/renderLottie';
 import { renderTgs } from '../../common/utils/renderTgs';
 import { isLottiePath, isTgsPath, sanitizeCategoryCode } from '../../common/utils/stickerPath';
 import { STICKER_ICON_PATH } from '../../common/utils/stickerIcon';
+import type Sticker from '../../common/models/Sticker';
+
+import type Mithril from 'mithril';
+
+interface StickerGroup {
+  key: string;
+  label: string;
+  stickers: Sticker[];
+}
 
 function stickerSvgIcon(size = '1.5em') {
   return (
@@ -21,8 +30,8 @@ function stickerSvgIcon(size = '1.5em') {
 /**
  * Agrupa por categoria: [{ key, label, stickers }].
  */
-function groupByCategory(stickers) {
-  const map = new Map();
+function groupByCategory(stickers: Sticker[]): StickerGroup[] {
+  const map = new Map<string, StickerGroup>();
 
   stickers.forEach((sticker) => {
     const key = sticker.category() || '';
@@ -31,7 +40,7 @@ function groupByCategory(stickers) {
     if (!map.has(key)) {
       map.set(key, { key, label, stickers: [] });
     }
-    map.get(key).stickers.push(sticker);
+    map.get(key)!.stickers.push(sticker);
   });
 
   return [...map.values()];
@@ -40,7 +49,7 @@ function groupByCategory(stickers) {
 /**
  * Ordena os grupos pela ordem salva; os que não estão nela vão para o fim.
  */
-function sortGroupsByOrder(groups, order) {
+function sortGroupsByOrder(groups: StickerGroup[], order: string[]): StickerGroup[] {
   if (!order || order.length === 0) return groups;
   return [...groups].sort((a, b) => {
     const ia = order.indexOf(a.key);
@@ -53,14 +62,16 @@ function sortGroupsByOrder(groups, order) {
 }
 
 export default class StickerList extends Component {
-  oninit(vnode) {
+  activeCategory: string | null = null;
+  renamingCategory: string | null = null;
+  renameCode = '';
+  renameName = '';
+  renameLoading = false;
+  renameError: string | null = null;
+  categoryOrder: string[] = [];
+
+  oninit(vnode: Mithril.Vnode<any, this>) {
     super.oninit(vnode);
-    this.activeCategory = null;
-    this.renamingCategory = null;
-    this.renameCode = '';
-    this.renameName = '';
-    this.renameLoading = false;
-    this.renameError = null;
 
     try {
       const raw = app.data.settings['ramon-stickers.category-order'];
@@ -75,7 +86,7 @@ export default class StickerList extends Component {
   /**
    * Move a categoria para cima (-1) ou para baixo (+1) e salva na hora.
    */
-  moveCategory(key, direction, sortedGroups) {
+  moveCategory(key: string, direction: number, sortedGroups: StickerGroup[]) {
     const keys = sortedGroups.map((g) => g.key);
     const idx = keys.indexOf(key);
     const newIdx = idx + direction;
@@ -114,7 +125,7 @@ export default class StickerList extends Component {
       });
   }
 
-  startRename(group) {
+  startRename(group: StickerGroup) {
     this.renamingCategory = group.key;
     this.renameCode = group.key;
     this.renameName = group.label !== '—' ? group.label : group.key;
@@ -128,7 +139,7 @@ export default class StickerList extends Component {
     m.redraw();
   }
 
-  saveRename(oldKey) {
+  saveRename(oldKey: string) {
     const newCode = sanitizeCategoryCode(this.renameCode);
     const newName = this.renameName.trim() || newCode;
 
@@ -169,12 +180,12 @@ export default class StickerList extends Component {
       });
   }
 
-  oncreate(vnode) {
+  oncreate(vnode: Mithril.VnodeDOM<any, this>) {
     super.oncreate(vnode);
     this.initAnimatedPreviews();
   }
 
-  onupdate(vnode) {
+  onupdate(vnode: Mithril.VnodeDOM<any, this>) {
     super.onupdate(vnode);
     this.initAnimatedPreviews();
   }
@@ -185,22 +196,22 @@ export default class StickerList extends Component {
   initAnimatedPreviews() {
     if (!this.element) return;
 
-    this.element.querySelectorAll('div[data-lottie-url]:not([data-lottie-loaded])').forEach((el) => {
+    this.element.querySelectorAll<HTMLElement>('div[data-lottie-url]:not([data-lottie-loaded])').forEach((el) => {
       el.setAttribute('data-lottie-loaded', '1');
       const url = el.getAttribute('data-lottie-url');
-      const hoverTarget = el.closest('.customSticker') || el;
+      const hoverTarget = el.closest<HTMLElement>('.customSticker') || el;
       if (url) renderLottie(el, url, { hoverPlay: true, hoverTarget });
     });
 
-    this.element.querySelectorAll('div[data-tgs-url]:not([data-tgs-loaded])').forEach((el) => {
+    this.element.querySelectorAll<HTMLElement>('div[data-tgs-url]:not([data-tgs-loaded])').forEach((el) => {
       el.setAttribute('data-tgs-loaded', '1');
       const url = el.getAttribute('data-tgs-url');
-      const hoverTarget = el.closest('.customSticker') || el;
+      const hoverTarget = el.closest<HTMLElement>('.customSticker') || el;
       if (url) renderTgs(el, url, { hoverPlay: true, hoverTarget });
     });
   }
 
-  getStickerUrl(path) {
+  getStickerUrl(path: string): string {
     if (!path) return '';
     return urlChecker(path) ? path : app.forum.attribute('baseUrl') + path;
   }
@@ -208,18 +219,19 @@ export default class StickerList extends Component {
   /**
    * Card de um sticker.
    */
-  stickerCard(sticker) {
+  stickerCard(sticker: Sticker) {
     const state = app.stickerListState;
     const selecting = state.selectionMode;
     const path = sticker.path() || '';
     const url = this.getStickerUrl(path);
     const isLottie = isLottiePath(path);
     const isTgs = isTgsPath(path);
-    const selected = selecting && state.isSelected(sticker.id());
+    const id = sticker.id() as string;
+    const selected = selecting && state.isSelected(id);
 
     return (
       <li key={sticker.id()}>
-        <div className={'customSticker' + (selected ? ' is-selected' : '')} onclick={selecting ? () => state.toggleSelect(sticker.id()) : null}>
+        <div className={'customSticker' + (selected ? ' is-selected' : '')} onclick={selecting ? () => state.toggleSelect(id) : null}>
           {selecting && (
             <div className={'customSticker-selectMark' + (selected ? ' is-selected' : '')}>
               <i className={'fas fa-' + (selected ? 'check-circle' : 'circle')} />
@@ -310,18 +322,18 @@ export default class StickerList extends Component {
                     className="FormControl FormControl--small"
                     placeholder={app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.rename_code_placeholder', {}, true)}
                     value={this.renameCode}
-                    oninput={(e) => {
-                      this.renameCode = e.target.value;
+                    oninput={(e: InputEvent) => {
+                      this.renameCode = (e.target as HTMLInputElement).value;
                     }}
                   />
                   <input
                     className="FormControl FormControl--small"
                     placeholder={app.translator.trans('ramon-stickers.admin.sticker_section.sticker_list.rename_name_placeholder', {}, true)}
                     value={this.renameName}
-                    oninput={(e) => {
-                      this.renameName = e.target.value;
+                    oninput={(e: InputEvent) => {
+                      this.renameName = (e.target as HTMLInputElement).value;
                     }}
-                    onkeydown={(e) => {
+                    onkeydown={(e: KeyboardEvent) => {
                       if (e.key === 'Enter') this.saveRename(group.key);
                       if (e.key === 'Escape') this.cancelRename();
                     }}
